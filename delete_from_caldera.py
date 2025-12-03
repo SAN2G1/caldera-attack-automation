@@ -106,21 +106,29 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Delete abilities and adversaries from Caldera")
+    parser.add_argument("tracking_file_pos", nargs="?", help="Path to uploaded_ids.yml file (positional)")
     parser.add_argument("--caldera-dir", type=str, help="Caldera output directory (e.g., data/processed/20251203_142900/caldera)")
-    parser.add_argument("--tracking-file", type=str, help="Path to uploaded_ids.yml file")
+    parser.add_argument("--tracking-file", type=str, dest="tracking_file_named", help="Path to uploaded_ids.yml file")
 
     args = parser.parse_args()
 
-    # caldera-dir이 주어진 경우 자동으로 tracking 파일 경로 생성
-    if args.caldera_dir:
+    # 우선순위: positional argument > named --tracking-file > --caldera-dir
+    tracking_file = None
+
+    if args.tracking_file_pos:  # positional argument
+        tracking_file = args.tracking_file_pos
+    elif args.tracking_file_named:  # named --tracking-file
+        tracking_file = args.tracking_file_named
+    elif args.caldera_dir:  # --caldera-dir
         tracking_file = str(Path(args.caldera_dir) / "uploaded_ids.yml")
-    elif args.tracking_file:
-        tracking_file = args.tracking_file
-    else:
+
+    if not tracking_file:
         print("Usage:")
-        print("  Option 1: python delete_from_caldera.py --caldera-dir <caldera_directory>")
-        print("  Option 2: python delete_from_caldera.py --tracking-file <uploaded_ids.yml>")
+        print("  Option 1: python delete_from_caldera.py <tracking_file>")
+        print("  Option 2: python delete_from_caldera.py --caldera-dir <caldera_directory>")
+        print("  Option 3: python delete_from_caldera.py --tracking-file <uploaded_ids.yml>")
         print("\nExample:")
+        print("  python delete_from_caldera.py data/processed/20251203_142900/caldera/uploaded_ids.yml")
         print("  python delete_from_caldera.py --caldera-dir data/processed/20251203_142900/caldera")
         print("  python delete_from_caldera.py --tracking-file data/processed/20251203_142900/caldera/uploaded_ids.yml")
         sys.exit(1)

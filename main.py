@@ -218,22 +218,23 @@ def main():
         print("\n[Step 5] Kill Chain Visualization")
         print("-" * 70)
 
-        # 가장 최신 Kill Chain 파일 사용
-        step3_output = f"{timestamped_output_dir}/step3_technique_selected.yml"
-        step2_output = f"{timestamped_output_dir}/step2_concrete_flow.yml"
+        # Caldera 출력 디렉토리에서 abilities.yml과 adversaries.yml 사용
+        caldera_output_dir = f"{timestamped_output_dir}/caldera"
+        abilities_file = f"{caldera_output_dir}/abilities.yml"
+        adversaries_file = f"{caldera_output_dir}/adversaries.yml"
 
-        if Path(step3_output).exists():
-            input_file = step3_output
-        elif Path(step2_output).exists():
-            input_file = step2_output
-        else:
-            print("[ERROR] Kill Chain 파일이 없습니다. Step 2~3 중 하나를 먼저 실행하세요.")
+        if not Path(abilities_file).exists():
+            print("[ERROR] abilities.yml 파일이 없습니다. Step 4를 먼저 실행하세요.")
+            sys.exit(1)
+
+        if not Path(adversaries_file).exists():
+            print("[ERROR] adversaries.yml 파일이 없습니다. Step 4를 먼저 실행하세요.")
             sys.exit(1)
 
         visualization_dir = f"{timestamped_output_dir}/visualizations"
 
         visualizer = AbilityFlowVisualizer()
-        visualizer.visualize_abilities(input_file, visualization_dir)
+        visualizer.visualize_abilities(abilities_file, adversaries_file, visualization_dir)
 
     print("\n" + "="*70)
     print("[SUCCESS] 완료!")
