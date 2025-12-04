@@ -96,8 +96,13 @@ class AbilityGenerator:
 
         print(f"  [OK] {len(abilities)}개 Ability 생성 완료")
 
+        # output_dir에서 버전 ID 추출 (예: data/processed/20251203_142900/caldera -> 20251203_142900)
+        version_id = self._extract_version_id(output_dir)
+        if version_id:
+            print(f"  [INFO] 버전 ID: {version_id}")
+
         # Adversary Profile 생성 (단일)
-        adversaries = self._create_adversary_profiles(abilities, nodes)
+        adversaries = self._create_adversary_profiles(abilities, nodes, version_id)
 
         # 결과 저장
         os.makedirs(output_dir, exist_ok=True)
@@ -357,19 +362,57 @@ Output format:
 
         return uploads
 
-    def _create_adversary_profiles(self, abilities: List[Dict], nodes: List[Dict]) -> List[Dict]:
-        """Adversary Profile 단일 생성"""
+    def _create_adversary_profiles(self, abilities: List[Dict], nodes: List[Dict], version_id: str = "") -> List[Dict]:
+        """Adversary Profile 단일 생성
+
+        Args:
+            abilities: Ability 목록
+            nodes: 노드 목록
+            version_id: 버전 식별자 (폴더명에서 추출, 예: "20251203_142900")
+        """
         # 모든 ability를 순서대로 포함
         ability_ids = [ability['ability_id'] for ability in abilities]
 
+        # version_id가 있으면 고유한 ID/이름 생성
+        if version_id:
+            adversary_id = f"kisa-ttp-adversary-{version_id}"
+            adversary_name = f"KISA TTP Adversary ({version_id})"
+        else:
+            adversary_id = "kisa-ttp-adversary"
+            adversary_name = "KISA TTP Adversary"
+
         adversaries = [{
-            "adversary_id": "kisa-ttp-adversary",
-            "name": "KISA TTP Adversary",
+            "adversary_id": adversary_id,
+            "name": adversary_name,
             "description": "Auto-generated adversary profile from KISA TTP report",
             "atomic_ordering": ability_ids
         }]
 
         return adversaries
+
+    def _extract_version_id(self, output_dir: str) -> str:
+        """output_dir 경로에서 버전 ID 추출
+
+        예: data/processed/20251203_142900/caldera -> 20251203_142900
+            data/processed/TTPS1_20251203/caldera -> TTPS1_20251203
+        """
+        import re
+        from pathlib import Path
+
+        path = Path(output_dir)
+
+        # caldera 폴더면 부모로 이동
+        if path.name == 'caldera':
+            path = path.parent
+
+        # data/processed/ 하위의 버전 폴더명 추출
+        parts = path.parts
+        for i, part in enumerate(parts):
+            if part == 'processed' and i + 1 < len(parts):
+                return parts[i + 1]
+
+        # processed가 없으면 마지막 폴더명 사용
+        return path.name if path.name else ""
 
     def _generate_uuid(self, node_id: str, node_name: str) -> str:
         """Deterministic UUID 생성"""

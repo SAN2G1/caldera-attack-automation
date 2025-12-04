@@ -4,322 +4,239 @@ KISA TTPs → Caldera Adversary 파이프라인의 Self-Correcting 모듈
 
 ## 개요
 
-M7 모듈은 Caldera에서 실행된 공격 시나리오의 실패한 Ability를 자동으로 감지하고 수정하여 재실행하는 시스템입니다.
+M7 모듈은 Caldera에서 실행된 공격 시나리오의 실패한 Ability를 자동으로 감지하고 LLM을 활용하여 수정합니다.
 
-### 목표
-
-- **초기 성공률**: 76% (현재)
-- **최종 성공률**: 85%+ (목표)
-- **최대 재시도**: 3회/Ability
-- **평균 수정 시간**: 30초/Ability 이내
-
-## 모듈 구조
+## 워크플로우
 
 ```
-modules/
-├── m7_models.py                      # 데이터 모델 (FailureType, ExecutionReport 등)
-├── module7_1_caldera_executor.py     # Caldera API 실행 및 결과 수집
-├── module7_2_failure_classifier.py   # 실패 유형 자동 분류
-├── module7_3_env_collector.py        # Agent 환경 정보 수집
-├── module7_4_ability_fixer.py        # LLM 기반 자동 수정
-└── module7_self_correcting.py        # 전체 오케스트레이터
-
-config/
-└── classification_rules.yml          # 실패 분류 규칙
-
-run_self_correcting.py                # 실행 스크립트
+[Caldera 서버]              [로컬]                    [Caldera 서버]
+     │                        │                           │
+     ▼                        │                           │
+ Operation 실행               │                            │
+     │                        │                           │
+     ▼                        │                           │
+ Report 수집 ─────────────────▶ 로그 분석                  │
+ (get_operation_report.py)    │                           │
+                              ▼                           │
+                         실패 분류                         │
+                              │                           │
+                              ▼                           │
+                         LLM 수정                          │
+                    (module7_self_correcting)             │
+                              │                           │
+                              ▼                           │
+                    abilities.yml 수정 ──────────────────▶ 재업로드
+                                                          │
+                                                          ▼
+                                                      재실행
 ```
 
-## 설치
+---
 
-필수 패키지가 이미 requirements.txt에 포함되어 있습니다:
+## 사전 준비
+
+### 필수 요구사항
+
+- Python 3.10+
+- Anthropic API Key (`.env` 파일에 설정)
+- Caldera 서버 실행 중
+- Caldera Agent 배포 완료
+
+### 설치
 
 ```bash
 pip install -r requirements.txt
 ```
 
-추가 요구사항:
-- Caldera 서버 실행 중
-- Caldera Agent 배포 완료
-- Anthropic API Key 설정 (.env 파일)
+---
 
-## 사용 방법
+## Step 1: Caldera에서 Operation 실행
 
-### 1. 기본 실행
+### 1.1 Abilities & Adversary 업로드
 
 ```bash
-python run_self_correcting.py \
-  --caldera-dir data/processed/20251203_142900/caldera \
-  --env templates/environment_description.md \
-  --agent-paw <your-agent-paw>
+python upload_to_caldera.py --caldera-dir data/processed/[날짜-시간]/caldera
 ```
 
-### 2. 전체 옵션
+### 1.2 Operation 실행
+
+1. `http://localhost:8888` 접속
+2. **Operations** → **Create Operation**
+3. 설정:
+   - Adversary: 업로드한 Adversary 선택
+   - Agents: 대상 Agent 선택
+   - Planner: `atomic`
+4. **Start** 클릭
+5. Operation 완료 대기
+
+### 1.3 Operation Report 수집
 
 ```bash
-python run_self_correcting.py \
-  --caldera-dir data/processed/20251203_142900/caldera \
-  --env templates/environment_description.md \
-  --agent-paw <your-agent-paw> \
-  --caldera-url http://localhost:8888 \
-  --caldera-key ADMIN123 \
-  --max-retries 3 \
-  --output report.json
+python get_operation_report.py --name "Operation이름" --output report.json
 ```
 
-### 옵션 설명
+또는 Caldera UI에서:
+1. Operation 완료 후 **Download Report** 클릭
+2. **JSON** 형식 선택
 
-| 옵션 | 필수 | 설명 | 기본값 |
-|------|------|------|--------|
-| `--caldera-dir` | O | Caldera 출력 디렉토리 (abilities.yml, adversaries.yml 포함) | - |
-| `--env` | O | 환경 설명 파일 (*.md) | - |
-| `--agent-paw` | O | Caldera Agent PAW (식별자) | - |
-| `--caldera-url` | X | Caldera 서버 URL | http://localhost:8888 |
-| `--caldera-key` | X | Caldera API 키 | ADMIN123 |
-| `--max-retries` | X | Ability당 최대 재시도 횟수 | 3 |
-| `--output` | X | 결과 보고서 JSON 파일 경로 | - |
+---
 
-## 실행 프로세스
+## Step 2: Self-Correcting 실행
 
-1. **초기 실행**: Caldera에서 Adversary 실행
-2. **결과 수집**: 실행 결과 분석
-3. **실패 감지**: 실패한 Ability 식별
-4. **실패 분류**: 5가지 유형으로 분류
-   - SYNTAX_ERROR: 명령어 문법 오류
-   - MISSING_ENV: 환경 정보 누락
-   - CALDERA_CONSTRAINT: Caldera 제약사항
-   - DEPENDENCY_ERROR: 권한 부족
-   - UNRECOVERABLE: 복구 불가능
-5. **환경 정보 수집**: Agent 정보 및 진단 명령어 실행
-6. **LLM 수정**: Claude API로 Ability 자동 수정
-7. **재실행**: 수정된 Ability 실행 (최대 3회)
-8. **통계 생성**: 최종 보고서 작성
+### 2.1 실행 명령어
 
-## 출력 예시
+```bash
+# 자동 탐색 (Report의 adversary_id로 abilities.yml 위치 자동 찾기)
+python -m modules.module7_self_correcting \
+  --report report.json \
+  --env environment_description.md
 
-### 콘솔 출력
+# 수동 지정
+python -m modules.module7_self_correcting \
+  --abilities data/processed/[날짜-시간]/caldera/abilities.yml \
+  --report report.json \
+  --env environment_description.md \
+  --output corrected_output
+```
+
+### 2.2 옵션 설명
+
+| 옵션 | 필수 | 설명 |
+|------|:----:|------|
+| `--abilities` | X | abilities.yml 파일 경로 (미지정 시 자동 탐색) |
+| `--report` | O | Operation Report JSON 파일 경로 |
+| `--env` | O | 환경 설명 파일 경로 |
+| `--output` | X | 출력 디렉토리 (기본: abilities.yml과 같은 위치) |
+
+> **자동 탐색**: Report의 `adversary_id` (예: `kisa-ttp-adversary-20251203_142900`)에서 버전 ID를 추출하여 `data/processed/20251203_142900/caldera/abilities.yml`을 자동으로 찾습니다.
+
+### 2.3 출력 예시
 
 ```
 ======================================================================
-M7: Self-Correcting Engine
+M7: Offline Self-Correcting Engine
 ======================================================================
 
-[Loaded] 36 abilities from data/processed/.../caldera/abilities.yml
-[Loaded] Adversary: KISA TTP Adversary
+[로드 완료] 38 abilities
+[로드 완료] Operation: TTPS1
+[통계] 전체: 69, 성공: 44, 실패: 25
 
-[Initial Execution]
-  ...
+[수정 단계] 8개 실패 처리
 
-[Initial Results]
-  Total: 36
-  Success: 27
-  Failed: 9
-  Success Rate: 75.0%
+  [Create Service for Persistence]
+    실패 유형: dependency_error
+    LLM 수정 중...
+    [완료] $currentUser = [Security.Principal.WindowsIdentity]::GetCurr...
 
-[Correction Phase]
-  Failed Abilities: 9
+  [Copy Caldera Agent to Internal Host]
+    실패 유형: missing_env
+    LLM 수정 중...
+    [완료] $payloadUrl = "http://192.168.56.1:8888/file/download"...
 
-======================================================================
-[Correcting] Web Login
-======================================================================
-  Failure Type: missing_env
-  [Attempt 1/3]
-    [OK] Ability fixed
-    New Command: $url = "http://192.168.1.10/login"...
-    [SUCCESS] Ability fixed and executed successfully
-
-...
+[저장] abilities.yml: corrected_output/abilities.yml
+[저장] correction_report.json: corrected_output/correction_report.json
 
 ======================================================================
-[Final Results]
-  Initial Success Rate: 75.0%
-  Final Success Rate: 88.9%
-  Improvement: +13.9%
+[결과] 2/8 abilities 수정 완료
 ======================================================================
 ```
 
-### JSON 보고서 (report.json)
+### 2.4 생성 파일
 
-```json
-{
-  "initial_stats": {
-    "total_abilities": 36,
-    "success": 27,
-    "failed": 9,
-    "success_rate": 0.75
-  },
-  "final_stats": {
-    "total_abilities": 36,
-    "success": 32,
-    "failed": 4,
-    "success_rate": 0.889
-  },
-  "correction_summary": {
-    "total_corrections_attempted": 9,
-    "successful_corrections": 5,
-    "failed_corrections": 4,
-    "avg_retries": 1.8,
-    "correction_success_rate": 0.556
-  },
-  "corrections": [
-    {
-      "ability_id": "uuid-xxx",
-      "ability_name": "Web Login",
-      "failure_type": "missing_env",
-      "attempts": 1,
-      "success": true,
-      "fixed_command": "$url = \"http://192.168.1.10/login\"...",
-      "reason": ""
-    }
-  ]
-}
+- `abilities.yml` - 수정된 명령어가 반영된 abilities 파일
+- `correction_report.json` - 수정 내역 보고서
+
+---
+
+## Step 3: 재업로드 및 재실행
+
+### 3.1 기존 Abilities 삭제 (선택)
+
+```bash
+python delete_from_caldera.py data/processed/[날짜-시간]/caldera/uploaded_ids.yml
 ```
 
-## 설정 파일
+### 3.2 수정된 Abilities 업로드
 
-### classification_rules.yml
-
-실패 유형별 키워드 및 패턴 정의:
-
-```yaml
-syntax_error:
-  keywords:
-    - "syntax error"
-    - "ParserError"
-  patterns:
-    - "line \\d+:"
-
-missing_env:
-  keywords:
-    - "cannot find path"
-    - "invalid URI"
-  extractors:
-    ip_address: "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"
-    url: "https?://[\\w\\.\\-:]+"
+```bash
+python upload_to_caldera.py --caldera-dir corrected_output/
 ```
 
-## 주요 기능
+### 3.3 새 Operation 실행
 
-### 1. 실패 유형 자동 분류
+Caldera UI에서 새 Operation 생성 및 실행
 
-Rule-based 키워드 매칭으로 5가지 유형 분류:
+---
 
-- **SYNTAX_ERROR**: PowerShell 문법 오류
-- **MISSING_ENV**: IP, URL, 경로 등 누락
-- **CALDERA_CONSTRAINT**: 변수 공유 불가 등
-- **DEPENDENCY_ERROR**: 권한 부족
-- **UNRECOVERABLE**: 도구 미설치 등
+## 실패 유형 분류
 
-### 2. 환경 정보 수집
+| 유형 | 설명 | 수정 가능 |
+|------|------|:--------:|
+| `syntax_error` | PowerShell 문법 오류 | O |
+| `missing_env` | 환경 정보 누락 (IP, URL 등) | O |
+| `caldera_constraint` | Caldera 변수 공유 불가 | O |
+| `dependency_error` | 권한 부족 (Access Denied) | O |
+| `unrecoverable` | 도구 미설치 등 복구 불가 | X |
 
-Caldera API를 통한 Agent 정보 조회:
+---
 
-- Platform, Executors, Privilege
-- Host, Username
-- 진단 명령어 실행 (whoami, ipconfig 등)
+## 다중 Agent 실패 판단
 
-### 3. LLM 기반 자동 수정
+여러 Agent에서 같은 Ability가 실행된 경우:
 
-Claude Sonnet 4.5를 사용한 지능형 수정:
+- **모든 Agent에서 실패** → 진짜 실패 (수정 대상)
+- **하나라도 성공** → 성공으로 간주 (권한 있는 Agent에서 성공한 것)
 
-- 유형별 맞춤 Prompt
-- 이전 실패 이력 학습
-- Caldera 제약사항 준수
-- PowerShell 5.1 호환
+예시:
+```
+Create Scheduled Task: reejhw(실패) + oiravv(성공) → 성공 처리
+Create Service:        reejhw(실패) + oiravv(실패) → 실패 (수정 대상)
+```
 
-### 4. 재시도 로직
+---
 
-- 최대 3회 재시도
-- 실패 이력 누적
-- 성공 시 즉시 종료
+## 문제 해결
 
-## 제약사항
+### Q1: abilities.yml을 찾을 수 없다면?
 
-### PowerShell 제약
+```bash
+ls data/processed/
+```
+최신 날짜-시간 폴더에서 `caldera/abilities.yml` 확인
 
-- PowerShell 5.1 호환 필수
-- 단일 라인 명령어
-- 변수 공유 불가
+### Q2: 환경 설명 파일은 어디에?
 
-### Caldera 제약
+프로젝트 루트의 `environment_description.md` 파일 사용
 
-- 각 Ability는 독립 프로세스
-- 이전 Ability 변수 참조 불가
-- Payload는 Caldera가 자동 배포
+### Q3: LLM 수정이 안 된다면?
 
-### API 제한
+- `.env` 파일에 `ANTHROPIC_API_KEY` 확인
+- `environment_description.md`에 상세 정보 추가
+- `correction_report.json`에서 실패 유형 확인
 
-- Anthropic API rate limit
-- 대용량 재시도 시 주의
+### Q4: Agent PAW를 모르는 경우
 
-## 트러블슈팅
-
-### 1. Agent PAW를 모르는 경우
-
-Caldera 웹 UI에서 확인:
-1. Agents 탭 열기
-2. Agent 선택
-3. PAW 복사
-
-또는 Caldera API:
+Caldera API로 확인:
 ```bash
 curl http://localhost:8888/api/v2/agents -H "KEY: ADMIN123"
 ```
 
-### 2. 환경 설명 파일 작성
+---
 
-`templates/environment_description.md` 참고:
+## 제약사항
 
-```markdown
-# 환경 설명
+### PowerShell 제약
+- PowerShell 5.1 호환 필수
+- 각 Ability는 독립 프로세스 (변수 공유 불가)
 
-## 네트워크
-- Target IP: 192.168.1.10
-- Web URL: http://192.168.1.10/login
+### Caldera 제약
+- 이전 Ability 변수 참조 불가
+- Payload는 Caldera가 자동 배포
 
-## 계정
-- Username: admin
-- Password: pass123
+### API 제한
+- Anthropic API rate limit 주의
 
-## Payload
-- cmd.asp
-- exploit.exe
-```
-
-### 3. Classification Rules 수정
-
-`config/classification_rules.yml` 편집:
-
-- 키워드 추가/제거
-- 패턴 정규식 수정
-- Extractor 추가
-
-## 성능 최적화
-
-### Token 사용량 절감
-
-- Prompt 간소화
-- 진단 명령어 최소화
-- 재시도 횟수 조정
-
-### 처리 속도
-
-- **평균 실행 시간** (36 abilities 기준):
-  - 초기 실행: ~5분
-  - 수정 및 재시도: ~3분 (9개 실패)
-  - 전체: ~8분
-
-## 향후 개선 사항
-
-- [ ] Linux/macOS 지원
-- [ ] Batch 처리 (여러 Agent 동시)
-- [ ] 수정 이력 DB 저장
-- [ ] 웹 UI 대시보드
-- [ ] 실시간 모니터링
-
-## 라이선스
-
-MIT License
+---
 
 ## 관련 문서
 
