@@ -8,12 +8,21 @@ import requests
 import json
 import sys
 from typing import Dict, List, Optional
+import sys
+import os
+
+# 프로젝트 루트를 경로에 추가
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from modules.core.config import get_caldera_url, get_caldera_api_key
 
 
 class FinalOutputCollector:
     """UI 방식으로 완전한 output 수집"""
     
-    def __init__(self, base_url="http://localhost:8888", api_key="ADMIN123"):
+    def __init__(self):
+        base_url = get_caldera_url()
+        api_key = get_caldera_api_key()
         self.base_url = base_url.rstrip('/')
         self.headers = {"KEY": api_key}
     
@@ -369,10 +378,7 @@ Examples:
     args = parser.parse_args()
     
     # 수집 시작
-    collector = FinalOutputCollector(
-        base_url=args.url,
-        api_key=args.api_key
-    )
+    collector = FinalOutputCollector()
     
     # Operation ID 가져오기
     if args.name:

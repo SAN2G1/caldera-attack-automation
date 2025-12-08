@@ -11,12 +11,19 @@ import requests
 import yaml
 from pathlib import Path
 from typing import List
+import sys
+import os
+
+# 프로젝트 루트를 경로에 추가
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from modules.core.config import get_caldera_url, get_caldera_api_key
 
 
 class CalderaDeleter:
-    def __init__(self, base_url="http://localhost:8888", api_key="ADMIN123"):
-        self.base_url = base_url
-        self.api_key = api_key
+    def __init__(self):
+        self.base_url = get_caldera_url()
+        self.api_key = get_caldera_api_key()
         self.session = requests.Session()
         self.session.headers.update({'KEY': api_key})
 
