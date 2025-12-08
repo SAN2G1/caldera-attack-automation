@@ -13,12 +13,12 @@ from pathlib import Path
 from datetime import datetime
 
 # 모듈 임포트
-from modules.module0_pdf_processing import PDFProcessor
-from modules.module1_abstract_flow import AbstractFlowExtractor
-from modules.module2_concrete_flow import ConcreteFlowGenerator
-from modules.module3_technique_selection import TechniqueSelector
-from modules.module4_ability_generator import AbilityGenerator
-from modules.module5_visualization import AbilityFlowVisualizer
+from modules.steps.step0_pdf_processing import PDFProcessor
+from modules.steps.step1_abstract_flow import AbstractFlowExtractor
+from modules.steps.step2_concrete_flow import ConcreteFlowGenerator
+from modules.steps.step3_technique_selection import TechniqueSelector
+from modules.steps.step4_ability_generator import AbilityGenerator
+from modules.steps.step5_visualization import AbilityFlowVisualizer
 
 
 def parse_step_range(step_arg):
@@ -158,7 +158,7 @@ def main():
     if 2 in steps:
         if not args.env:
             print("[ERROR] Step 2 실행 시 --env 인자가 필요합니다")
-            print("예: --env templates/environment_description_example.md")
+            print("예: --env environment_description.md")
             sys.exit(1)
 
         print("\n[Step 2] Concrete Attack Flow Generation")
