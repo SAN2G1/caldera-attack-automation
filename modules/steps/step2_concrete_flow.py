@@ -6,11 +6,10 @@ Combine abstract flow + environment description (MD) → concrete attack flow (K
 import yaml
 import os
 import re
-from anthropic import Anthropic
 from typing import Dict, List
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from modules.config import get_claude_model, get_anthropic_api_key
+from modules.ai.factory import get_llm_client
 
 try:
     from mitreattack.stix20 import MitreAttackData
@@ -21,8 +20,7 @@ except ImportError:
 
 class ConcreteFlowGenerator:
     def __init__(self):
-        self.client = Anthropic(api_key=get_anthropic_api_key())
-        self.model = get_claude_model()
+        self.llm = get_llm_client()
         self.mitre_data = None
 
         # Load MITRE ATT&CK data if available
@@ -90,13 +88,7 @@ class ConcreteFlowGenerator:
         """Generate concrete attack flow using Claude"""
         print("  [Generating concrete attack flow...]")
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=12000,
-            temperature=0,
-            messages=[{
-                "role": "user",
-                "content": f"""You are a penetration testing expert creating executable attack plans.
+        prompt = f"""You are a penetration testing expert creating executable attack plans.
 
 # Abstract Attack Goals
 
@@ -231,11 +223,11 @@ Correct node:
 **Note**: Technique IDs will be added automatically in post-processing using mitreattack-python.
 
 **Output YAML only. No explanations.**"""
-            }]
-        )
+
+        response_text = self.llm.generate_text(prompt=prompt, max_tokens=12000)
 
         try:
-            yaml_text = self._extract_yaml(response.content[0].text)
+            yaml_text = self._extract_yaml(response_text)
             flow = yaml.safe_load(yaml_text)
             print(f"  [OK] Generated {len(flow.get('nodes', []))} concrete steps")
             return flow

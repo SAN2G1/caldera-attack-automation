@@ -6,17 +6,15 @@ Uses 2-stage extraction: overview → detailed flow
 
 import yaml
 import os
-from anthropic import Anthropic
 from typing import Dict, List
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from modules.config import get_claude_model, get_anthropic_api_key
+from modules.ai.factory import get_llm_client
 
 
 class AbstractFlowExtractor:
     def __init__(self):
-        self.client = Anthropic(api_key=get_anthropic_api_key())
-        self.model = get_claude_model()
+        self.llm = get_llm_client()
         self.chunk_size = 8000  # 청크 크기 (characters)
 
     def extract_abstract_flow(self, input_file: str, output_file: str):
@@ -74,13 +72,7 @@ class AbstractFlowExtractor:
         # Take first 3000 characters for overview
         overview_chunk = full_text[:3000]
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=1500,
-            temperature=0,
-            messages=[{
-                "role": "user",
-                "content": f"""Extract the overview/summary section from this KISA threat intelligence report.
+        prompt = f"""Extract the overview/summary section from this KISA threat intelligence report.
 
 # Report Beginning
 {overview_chunk}
@@ -92,11 +84,10 @@ Find and extract the overview section that describes:
 - High-level attack flow summary
 
 Output ONLY the overview text, nothing else."""
-            }]
-        )
 
-        overview = response.content[0].text.strip()
-        return overview
+        # Generate using LLM
+        overview = self.llm.generate_text(prompt=prompt, max_tokens=1500)
+        return overview.strip()
 
     def _extract_flow_chunked(self, overview: str, full_text: str) -> Dict:
         """Stage 2: Extract abstract attack flow by processing content iteratively in chunks"""
@@ -114,17 +105,13 @@ Output ONLY the overview text, nothing else."""
         for i, chunk in enumerate(chunks):
             print(f"    Processing chunk {i+1}/{len(chunks)}...")
 
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=3000,
-                temperature=0,
-                messages=[{
-                    "role": "user",
-                    "content": self._build_chunk_prompt(overview, chunk, i+1, len(chunks), collected_goals)
-                }]
-            )
+            # Build prompt using template
+            prompt = self._build_chunk_prompt(overview, chunk, i+1, len(chunks), collected_goals)
 
-            result = self._parse_chunk_response(response.content[0].text)
+            # Generate using LLM
+            response_text = self.llm.generate_text(prompt=prompt, max_tokens=3000)
+
+            result = self._parse_chunk_response(response_text)
 
             # Add newly found goals
             if result.get('new_goals'):
@@ -218,19 +205,16 @@ Focus on:
     def _synthesize_flow(self, overview: str, collected_goals: list) -> Dict:
         """Synthesize collected goals into final abstract flow structure"""
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=4000,
-            temperature=0,
-            messages=[{
-                "role": "user",
-                "content": f"""You are organizing attack goals into a structured, logically-ordered abstract attack flow.
+        # Prepare collected goals as YAML string
+        collected_goals_yaml = yaml.dump(collected_goals, allow_unicode=True)
+
+        prompt = f"""You are organizing attack goals into a structured, logically-ordered abstract attack flow.
 
 # Overview
 {overview}
 
 # Collected Attack Goals (in discovery order, NOT logical order)
-{yaml.dump(collected_goals, allow_unicode=True)}
+{collected_goals_yaml}
 
 # Task
 Reorganize these goals into a **logically correct attack flow** that respects dependencies and privilege requirements.
@@ -312,11 +296,12 @@ required_capabilities:
 **Important**: Your output must reflect the ACTUAL goals provided, not the example. Reorder them logically while preserving all goals.
 
 **Output YAML only. No explanations.**"""
-            }]
-        )
+
+        # Generate using LLM
+        response_text = self.llm.generate_text(prompt=prompt, max_tokens=4000)
 
         try:
-            yaml_text = self._extract_yaml(response.content[0].text)
+            yaml_text = self._extract_yaml(response_text)
             flow = yaml.safe_load(yaml_text)
             print(f"  [OK] Synthesized flow with {len(flow.get('attack_goals', []))} goals")
             return flow

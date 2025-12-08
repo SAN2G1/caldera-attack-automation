@@ -1,7 +1,7 @@
 """Anthropic Claude 클라이언트 구현체."""
 from typing import Optional
 import anthropic
-from modules.core.config import get_anthropic_api_key, get_claude_model
+from modules.config import get_anthropic_api_key, get_claude_model
 from .base import LLMClient
 
 

@@ -12,16 +12,14 @@ import yaml
 import uuid
 import re
 from typing import Dict, List, Optional
-from anthropic import Anthropic
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from modules.config import get_claude_model, get_anthropic_api_key
+from modules.ai.factory import get_llm_client
 
 
 class AbilityGenerator:
     def __init__(self):
-        self.client = Anthropic(api_key=get_anthropic_api_key())
-        self.model = get_claude_model()
+        self.llm = get_llm_client()
 
         # UUID namespace for deterministic UUID generation
         self.uuid_namespace = uuid.UUID('12345678-1234-5678-1234-567812345678')
@@ -230,14 +228,9 @@ Output ONLY the improved command (no explanations):
 ```"""
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=500,
-                temperature=0,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            response_text = self.llm.generate_text(prompt=prompt, max_tokens=500)
 
-            command_text = response.content[0].text.strip()
+            command_text = response_text.strip()
             command_text = command_text.replace('```powershell', '').replace('```cmd', '').replace('```', '').strip()
 
             # 여전히 거부하면 원본 사용
@@ -300,14 +293,9 @@ Output format:
 ```"""
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=500,  # 토큰 제한 (명령어만 생성)
-                temperature=0,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            response_text = self.llm.generate_text(prompt=prompt, max_tokens=500)
 
-            command_text = response.content[0].text.strip()
+            command_text = response_text.strip()
             # 코드 블록 제거
             command_text = command_text.replace('```powershell', '').replace('```cmd', '').replace('```', '').strip()
 

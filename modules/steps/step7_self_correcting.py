@@ -12,14 +12,13 @@ Module 7: Offline Self-Correcting Engine
 import yaml
 import json
 import re
-import anthropic
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
-from modules.config import get_anthropic_api_key, get_claude_model
+from modules.ai.factory import get_llm_client
 
 
 # ============================================================================
@@ -130,8 +129,7 @@ class AbilityFixer:
     }
 
     def __init__(self):
-        self.client = anthropic.Anthropic(api_key=get_anthropic_api_key())
-        self.model = get_claude_model()
+        self.llm = get_llm_client()
 
     def fix_ability(
         self,
@@ -148,15 +146,9 @@ class AbilityFixer:
         prompt = self._build_prompt(failed, original_ability, env_description)
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=2000,
-                temperature=0.3,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            response_text = self.llm.generate_text(prompt=prompt, max_tokens=2000)
 
-            text = response.content[0].text
-            fixed_command = self._extract_command(text)
+            fixed_command = self._extract_command(response_text)
 
             return fixed_command, True
 

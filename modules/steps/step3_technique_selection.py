@@ -5,17 +5,15 @@ Select final MITRE ATT&CK technique from candidates (top 3 → final 1)
 
 import yaml
 import os
-from anthropic import Anthropic
 from typing import Dict, List
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from modules.config import get_claude_model, get_anthropic_api_key
+from modules.ai.factory import get_llm_client
 
 
 class TechniqueSelector:
     def __init__(self):
-        self.client = Anthropic(api_key=get_anthropic_api_key())
-        self.model = get_claude_model()
+        self.llm = get_llm_client()
 
     def select_techniques(self, input_file: str, output_file: str):
         """Select final technique from candidates for each node"""
@@ -129,13 +127,7 @@ class TechniqueSelector:
 
         # Use AI to select based on environment context
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=500,
-                temperature=0,
-                messages=[{
-                    "role": "user",
-                    "content": f"""Select the most appropriate MITRE ATT&CK technique for this attack step.
+            prompt = f"""Select the most appropriate MITRE ATT&CK technique for this attack step.
 
 # Attack Step
 
@@ -163,12 +155,12 @@ Output JSON only:
   "reason": "Brief reason (1 sentence)"
 }}
 ```"""
-                }]
-            )
+
+            response_text = self.llm.generate_text(prompt=prompt, max_tokens=500)
 
             # Parse response
             import json
-            text = response.content[0].text
+            text = response_text
             if '```json' in text:
                 json_text = text.split('```json')[1].split('```')[0].strip()
             elif '```' in text:
@@ -260,16 +252,11 @@ Return YAML with ONLY the node id and commands field:
 """
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=8000,
-                temperature=0,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            response_text = self.llm.generate_text(prompt=prompt, max_tokens=8000)
 
             # YAML 추출
             import re
-            text = response.content[0].text.strip()
+            text = response_text.strip()
             if '```yaml' in text:
                 yaml_text = text.split('```yaml')[1].split('```')[0].strip()
             elif '```' in text:

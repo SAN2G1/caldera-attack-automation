@@ -48,3 +48,12 @@ def get_caldera_api_key() -> str:
         str: Caldera API key (default: ADMIN123)
     """
     return os.getenv("CALDERA_API_KEY", "ADMIN123")
+
+
+def get_llm_provider() -> str:
+    """Get LLM provider from environment variable.
+
+    Returns:
+        str: LLM provider name (default: claude)
+    """
+    return os.getenv("LLM_PROVIDER", "claude").lower()
