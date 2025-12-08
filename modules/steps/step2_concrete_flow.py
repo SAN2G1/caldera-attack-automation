@@ -10,6 +10,7 @@ from typing import Dict, List
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from modules.ai.factory import get_llm_client
+from modules.prompts.manager import PromptManager
 
 try:
     from mitreattack.stix20 import MitreAttackData
@@ -21,6 +22,7 @@ except ImportError:
 class ConcreteFlowGenerator:
     def __init__(self):
         self.llm = get_llm_client()
+        self.prompt_manager = PromptManager()
         self.mitre_data = None
 
         # Load MITRE ATT&CK data if available
@@ -88,141 +90,13 @@ class ConcreteFlowGenerator:
         """Generate concrete attack flow using Claude"""
         print("  [Generating concrete attack flow...]")
 
-        prompt = f"""You are a penetration testing expert creating executable attack plans.
+        abstract_flow_yaml = yaml.dump(abstract_flow, allow_unicode=True)
 
-# Abstract Attack Goals
-
-{yaml.dump(abstract_flow, allow_unicode=True)}
-
-# Target Environment
-
-{environment_description}
-
-# Task
-
-Map each abstract goal to concrete attack steps using the specific environment details.
-
-## Core Principles
-
-1. **Use Actual Environment Details**
-   - Extract all specific values from the environment description (IPs, URLs, credentials, file names, methods, parameters)
-   - Every detail mentioned must be captured in the output
-
-2. **Create Executable Steps**
-   - Each node must contain enough information to actually execute the attack
-   - Include all parameters, paths, and configurations needed
-
-3. **Preserve Information**
-   - Don't lose or simplify any environment-specific details
-   - If the environment says "POST with userid and password parameters", include exactly that
-
-4. **Tool Selection Priority**
-   - **1st Priority**: Use tools/payloads explicitly provided in environment description (Caldera payloads, uploaded files)
-   - **2nd Priority**: Use native OS built-in tools (PowerShell, cmd.exe, netstat, systeminfo, etc.)
-   - **3rd Priority**: Use simulation/stub commands when actual tools unavailable (e.g., keylogger simulation with echo commands)
-
-5. **Caldera Payload Handling**
-   - If environment mentions files in "## Caldera Payload" section, these are ALREADY available to the agent
-   - Reference payload files by name only (e.g., "cmd.asp", "PrintSpoofer64.exe")
-   - DO NOT include download URLs or methods - Caldera handles file delivery automatically
-   - Just describe what to do with the file once it's available (e.g., "copy cmd.asp to uploads folder")
-
-## Output Structure
-
-```yaml
-nodes:
-  - id: "node_001"
-    name: "Attack step name"
-    tactic: "MITRE ATT&CK Tactic"
-    description: "What this accomplishes"
-
-    environment_specific:
-      # Extract ALL details from environment description
-      target: "actual IP/hostname"
-      url: "actual URL"
-      method: "actual HTTP method (POST/GET/etc)"
-      params: ["actual", "parameter", "names"]
-      credentials:
-        username: "actual username"
-        password: "actual password"
-      payload: "actual filename"
-      commands: "PowerShell command in single line"  # IMPORTANT: Generate executable command here
-      # Include ANY other details mentioned
-
-edges:
-  - from: "node_id"
-    to: "node_id"
-    dependency_type: "required"
-
-execution_order:
-  - "node_001"
-  - "node_002"
-```
-
-## Examples
-
-**Example 1: Using provided payload**
-
-Environment says: "Caldera payloads: cmd.asp, deploy.ps1. Login at http://192.168.56.105/login_process.asp using POST with userid/password parameters. Credentials: admin/P@ssw0rd!2020"
-
-Correct node:
-```yaml
-- id: "node_001"
-  name: "Web Application Login"
-  tactic: "initial-access"
-  description: "Authenticate using compromised credentials"
-  environment_specific:
-    target: "192.168.56.105"
-    url: "http://192.168.56.105/login_process.asp"
-    method: "POST"
-    params: ["userid", "password"]
-    credentials:
-      username: "admin"
-      password: "P@ssw0rd!2020"
-
-- id: "node_002"
-  name: "Upload Web Shell"
-  tactic: "initial-access"
-  description: "Deploy cmd.asp web shell using Caldera payload"
-  environment_specific:
-    payload: "cmd.asp"  # Caldera automatically downloads to agent working directory
-```
-
-**Example 2: Using native OS tools**
-
-Abstract goal: "Compress collected data for exfiltration"
-No compression tool in environment description.
-
-Correct node:
-```yaml
-- id: "node_015"
-  name: "Compress Collected Data"
-  tactic: "exfiltration"
-  description: "Compress data using Windows built-in tools"
-  environment_specific:
-    command: "Compress-Archive -Path C:\\Windows\\Temp\\exfil\\* -DestinationPath C:\\Windows\\Temp\\data.zip"
-    tool: "PowerShell Compress-Archive"  # 2nd priority: native tool
-```
-
-**Example 3: Using simulation/stub**
-
-Abstract goal: "Deploy keylogger for credential harvesting"
-No keylogger in environment description.
-
-Correct node:
-```yaml
-- id: "node_020"
-  name: "Deploy Keylogger (Simulated)"
-  tactic: "credential-access"
-  description: "Simulate keylogger deployment"
-  environment_specific:
-    command: "echo 'keylogger stub' > C:\\Windows\\Temp\\perfcon.dat; Write-Output 'Keylogger installed (simulated)'"
-    simulation: true  # 3rd priority: stub simulation
-```
-
-**Note**: Technique IDs will be added automatically in post-processing using mitreattack-python.
-
-**Output YAML only. No explanations.**"""
+        prompt = self.prompt_manager.render(
+            "step2_generate_flow.yaml",
+            abstract_flow=abstract_flow_yaml,
+            environment_description=environment_description
+        )
 
         response_text = self.llm.generate_text(prompt=prompt, max_tokens=12000)
 
@@ -234,6 +108,7 @@ Correct node:
         except Exception as e:
             print(f"  [ERROR] Failed to generate concrete flow: {e}")
             raise
+
 
     def _add_technique_ids(self, flow: Dict) -> Dict:
         """Add MITRE ATT&CK Technique ID candidates to nodes using mitreattack-python"""

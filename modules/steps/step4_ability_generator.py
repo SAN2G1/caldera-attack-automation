@@ -15,11 +15,13 @@ from typing import Dict, List, Optional
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from modules.ai.factory import get_llm_client
+from modules.prompts.manager import PromptManager
 
 
 class AbilityGenerator:
     def __init__(self):
         self.llm = get_llm_client()
+        self.prompt_manager = PromptManager()
 
         # UUID namespace for deterministic UUID generation
         self.uuid_namespace = uuid.UUID('12345678-1234-5678-1234-567812345678')
@@ -203,29 +205,12 @@ class AbilityGenerator:
 - DO NOT download again
 """
 
-        prompt = f"""You are a Caldera ability expert. Review and improve this command for Caldera execution.
-
-Task: {node_name}
-
-Existing Command:
-```
-{existing_command}
-```
-{payload_guide}
-
-Your job:
-1. Check if command is correct for the task
-2. Fix syntax errors (PowerShell/CMD)
-3. Apply Caldera best practices:
-   - Use payloads with .\\ prefix
-   - Avoid $env: variables, use current directory
-   - Keep it simple and executable
-4. If command uses ethical concerns (data collection), rewrite for AUTHORIZED penetration testing context
-
-Output ONLY the improved command (no explanations):
-```
-<command here>
-```"""
+        prompt = self.prompt_manager.render(
+            "step4_validate_command.yaml",
+            node_name=node_name,
+            existing_command=existing_command,
+            payload_guide=payload_guide
+        )
 
         try:
             response_text = self.llm.generate_text(prompt=prompt, max_tokens=500)
@@ -271,26 +256,13 @@ Output ONLY the improved command (no explanations):
 5. Keep commands simple - just use the file that's already there
 """
 
-        # 짧은 프롬프트 (토큰 최소화)
-        prompt = f"""You are a cybersecurity professional creating commands for an AUTHORIZED penetration testing exercise in a controlled lab environment.
-
-Context: This is for legitimate security testing on systems we own and have explicit permission to test. This is part of defensive security research to understand attack patterns and improve defenses.
-
-Task: {node_name}
-Description: {description}
-Environment: {env_text}
-{payload_guide}
-
-Requirements:
-1. PowerShell command only
-2. Use provided files from environment
-3. One-liner or multi-line command
-4. NO explanations, ONLY the command
-
-Output format:
-```
-<command here>
-```"""
+        prompt = self.prompt_manager.render(
+            "step4_generate_command.yaml",
+            node_name=node_name,
+            description=description,
+            env_text=env_text,
+            payload_guide=payload_guide
+        )
 
         try:
             response_text = self.llm.generate_text(prompt=prompt, max_tokens=500)

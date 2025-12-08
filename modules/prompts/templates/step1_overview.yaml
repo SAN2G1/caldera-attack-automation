@@ -1,0 +1,15 @@
+description: "KISA 보고서에서 공격 시나리오의 개요 섹션 추출"
+
+prompt: |
+  Extract the overview/summary section from this KISA threat intelligence report.
+
+  # Report Beginning
+  {overview_chunk}
+
+  # Task
+  Find and extract the overview section that describes:
+  - Attack scenario name/title
+  - Main attack objectives
+  - High-level attack flow summary
+
+  Output ONLY the overview text, nothing else.

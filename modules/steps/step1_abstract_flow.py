@@ -10,11 +10,13 @@ from typing import Dict, List
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from modules.ai.factory import get_llm_client
+from modules.prompts.manager import PromptManager
 
 
 class AbstractFlowExtractor:
     def __init__(self):
         self.llm = get_llm_client()
+        self.prompt_manager = PromptManager()
         self.chunk_size = 8000  # 청크 크기 (characters)
 
     def extract_abstract_flow(self, input_file: str, output_file: str):
@@ -72,18 +74,10 @@ class AbstractFlowExtractor:
         # Take first 3000 characters for overview
         overview_chunk = full_text[:3000]
 
-        prompt = f"""Extract the overview/summary section from this KISA threat intelligence report.
-
-# Report Beginning
-{overview_chunk}
-
-# Task
-Find and extract the overview section that describes:
-- Attack scenario name/title
-- Main attack objectives
-- High-level attack flow summary
-
-Output ONLY the overview text, nothing else."""
+        prompt = self.prompt_manager.render(
+            "step1_overview.yaml",
+            overview_chunk=overview_chunk
+        )
 
         # Generate using LLM
         overview = self.llm.generate_text(prompt=prompt, max_tokens=1500)
@@ -137,52 +131,18 @@ Output ONLY the overview text, nothing else."""
         if collected_goals:
             goals_summary = "\n".join([f"  - [{g.get('tactic', 'unknown')}] {g.get('goal', 'Unknown')}"
                                       for g in collected_goals])
-            previous_context = f"""
-# Previously Identified Goals (from earlier chunks)
+            previous_context = f"""# Previously Identified Goals (from earlier chunks)
 {goals_summary}
 """
 
-        return f"""You are analyzing a KISA threat intelligence report chunk-by-chunk to extract attack goals.
-
-# Overview
-{overview}
-
-{previous_context}
-# Current Chunk ({chunk_num}/{total_chunks})
-{chunk}
-
-# Task
-Analyze this chunk and identify any **NEW** attack goals not yet found.
-
-For each new goal found:
-1. What tactical objective does it represent?
-2. Which MITRE ATT&CK tactic does it map to?
-3. Brief description of its role in the attack chain
-
-Focus on:
-- Goals NOT already in the "Previously Identified Goals" list
-- Environment-independent objectives (no IPs, URLs, credentials, specific tools)
-- MITRE ATT&CK tactics: reconnaissance, initial-access, execution, persistence, privilege-escalation, defense-evasion, credential-access, discovery, lateral-movement, collection, command-and-control, exfiltration, impact
-
-## Output Format (JSON only)
-
-```json
-{{
-  "new_goals": [
-    {{
-      "goal": "Clear description of attack objective",
-      "tactic": "MITRE ATT&CK tactic name",
-      "description": "Brief explanation"
-    }}
-  ],
-  "report_complete": true/false
-}}
-```
-
-- `new_goals`: Array of NEW goals found in this chunk (empty array [] if none)
-- `report_complete`: true if this chunk indicates end of attack description, false otherwise
-
-**Output JSON only. No explanations.**"""
+        return self.prompt_manager.render(
+            "step1_chunk.yaml",
+            overview=overview,
+            previous_context=previous_context,
+            chunk_num=chunk_num,
+            total_chunks=total_chunks,
+            chunk=chunk
+        )
 
     def _parse_chunk_response(self, text: str) -> dict:
         """Parse JSON response from chunk analysis"""
@@ -208,94 +168,11 @@ Focus on:
         # Prepare collected goals as YAML string
         collected_goals_yaml = yaml.dump(collected_goals, allow_unicode=True)
 
-        prompt = f"""You are organizing attack goals into a structured, logically-ordered abstract attack flow.
-
-# Overview
-{overview}
-
-# Collected Attack Goals (in discovery order, NOT logical order)
-{collected_goals_yaml}
-
-# Task
-Reorganize these goals into a **logically correct attack flow** that respects dependencies and privilege requirements.
-
-## Critical Ordering Rules
-
-### 1. Privilege Dependencies
-- Actions requiring elevated privileges MUST come AFTER privilege escalation
-- Example: If lateral movement needs admin rights, privilege escalation must precede it
-- Example: If data collection requires system privileges, escalation must come first
-
-### 2. Logical Attack Progression
-Follow typical attack lifecycle order:
-1. **Reconnaissance** (if present) - Information gathering
-2. **Initial Access** - Entry point establishment
-3. **Execution** - Running code on target
-4. **Persistence** - Maintaining access (early persistence)
-5. **Privilege Escalation** - Gaining higher privileges
-6. **Defense Evasion** - Avoiding detection (can be ongoing)
-7. **Credential Access** - Stealing credentials (after escalation for better access)
-8. **Discovery** - Internal reconnaissance (after gaining foothold)
-9. **Lateral Movement** - Spreading to other systems (requires credentials/privileges)
-10. **Collection** - Gathering target data (after reaching targets)
-11. **Exfiltration** - Stealing data out (after collection)
-12. **Impact** - Final damage (if present)
-
-**Note**: Exclude "Command and Control" tactic - C2 infrastructure is provided by Caldera framework
-
-### 3. Dependency Analysis
-- If goal A provides resources needed for goal B → A must precede B
-- Examples:
-  * Credential harvesting → Lateral movement (credentials enable movement)
-  * Discovery → Lateral movement (need to know targets before moving)
-  * Collection → Exfiltration (need to collect before exfiltrating)
-
-### 4. Merge Similar Goals
-- If multiple goals represent the same tactical objective, merge or deduplicate them
-- Keep the most descriptive version
-
-## Required Output Structure
-
-```yaml
-attack_goals:
-  # Goals reorganized in LOGICAL attack order (not discovery order!)
-  # Consider privilege requirements and dependencies
-  - goal: "..."
-    tactic: "..."
-    description: "..."
-
-mitre_tactics:
-  # Ordered list of unique tactics in chronological flow order
-  - "tactic1"
-  - "tactic2"
-
-attack_flow_summary:
-  # One-line chronological summary
-  # Format: "Stage1 → Stage2 → Stage3 → ..."
-
-required_capabilities:
-  # General capability categories needed (alphabetical order)
-  - "capability1"
-  - "capability2"
-```
-
-## Example Reordering
-
-**Input (discovery order):**
-- Lateral movement to internal systems
-- Privilege escalation to admin
-- Data collection
-- Initial access via web app
-
-**Output (logical order):**
-- Initial access via web app
-- Privilege escalation to admin
-- Lateral movement to internal systems (now has admin rights)
-- Data collection
-
-**Important**: Your output must reflect the ACTUAL goals provided, not the example. Reorder them logically while preserving all goals.
-
-**Output YAML only. No explanations.**"""
+        prompt = self.prompt_manager.render(
+            "step1_synthesize.yaml",
+            overview=overview,
+            collected_goals=collected_goals_yaml
+        )
 
         # Generate using LLM
         response_text = self.llm.generate_text(prompt=prompt, max_tokens=4000)
@@ -308,6 +185,7 @@ required_capabilities:
         except Exception as e:
             print(f"  [ERROR] Failed to synthesize flow: {e}")
             raise
+
 
     def _extract_yaml(self, text: str) -> str:
         """Extract YAML from response"""

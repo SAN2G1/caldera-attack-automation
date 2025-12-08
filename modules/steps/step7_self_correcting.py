@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from modules.ai.factory import get_llm_client
+from modules.prompts.manager import PromptManager
 
 
 # ============================================================================
@@ -130,6 +131,7 @@ class AbilityFixer:
 
     def __init__(self):
         self.llm = get_llm_client()
+        self.prompt_manager = PromptManager()
 
     def fix_ability(
         self,
@@ -167,58 +169,24 @@ class AbilityFixer:
         original_cmd = original_ability.get('executors', [{}])[0].get('command', '')
         strategy = self.FIX_STRATEGIES.get(failed.failure_type, "")
 
-        return f"""당신은 Caldera Ability 수정 전문가입니다.
-실패한 Ability의 명령어를 분석하고 수정해야 합니다.
+        stderr_preview = failed.stderr[:1000] if failed.stderr else "(없음)"
+        stdout_preview = failed.stdout[:1000] if failed.stdout else "(없음)"
 
-═══════════════════════════════════════════════════════════════════
-[실패한 Ability 정보]
-═══════════════════════════════════════════════════════════════════
-- ID: {failed.ability_id}
-- 이름: {failed.ability_name}
-- Tactic: {failed.tactic}
-- Technique: {failed.technique_id} ({failed.technique_name})
-
-[원본 명령어]
-```powershell
-{original_cmd}
-```
-
-═══════════════════════════════════════════════════════════════════
-[실행 결과 - 실패]
-═══════════════════════════════════════════════════════════════════
-- Exit Code: {failed.exit_code}
-
-[stderr]:
-```
-{failed.stderr[:1000] if failed.stderr else "(없음)"}
-```
-
-[stdout]:
-```
-{failed.stdout[:1000] if failed.stdout else "(없음)"}
-```
-
-═══════════════════════════════════════════════════════════════════
-[실패 원인 분류]: {failed.failure_type.value}
-═══════════════════════════════════════════════════════════════════
-{strategy}
-
-═══════════════════════════════════════════════════════════════════
-[환경 설명]
-═══════════════════════════════════════════════════════════════════
-{env_description}
-
-═══════════════════════════════════════════════════════════════════
-[중요 규칙]
-═══════════════════════════════════════════════════════════════════
-1. 각 Ability는 독립적인 PowerShell 프로세스에서 실행됨 - 변수 공유 없음
-2. 환경 설명의 실제 값을 사용할 것
-3. PowerShell 5.1 호환성 유지
-4. 수정된 명령어만 출력 (설명 불필요)
-
-수정된 PowerShell 명령어를 생성하세요:
-```powershell
-"""
+        return self.prompt_manager.render(
+            "step7_fix_ability.yaml",
+            ability_id=failed.ability_id,
+            ability_name=failed.ability_name,
+            tactic=failed.tactic,
+            technique_id=failed.technique_id,
+            technique_name=failed.technique_name,
+            original_cmd=original_cmd,
+            exit_code=failed.exit_code,
+            stderr=stderr_preview,
+            stdout=stdout_preview,
+            failure_type=failed.failure_type.value,
+            strategy=strategy,
+            env_description=env_description
+        )
 
     def _extract_command(self, text: str) -> str:
         """LLM 응답에서 명령어 추출"""

@@ -1,0 +1,91 @@
+description: "수집된 공격 목표를 논리적인 공격 흐름으로 종합"
+
+prompt: |
+  You are organizing attack goals into a structured, logically-ordered abstract attack flow.
+
+  # Overview
+  {overview}
+
+  # Collected Attack Goals (in discovery order, NOT logical order)
+  {collected_goals}
+
+  # Task
+  Reorganize these goals into a **logically correct attack flow** that respects dependencies and privilege requirements.
+
+  ## Critical Ordering Rules
+
+  ### 1. Privilege Dependencies
+  - Actions requiring elevated privileges MUST come AFTER privilege escalation
+  - Example: If lateral movement needs admin rights, privilege escalation must precede it
+  - Example: If data collection requires system privileges, escalation must come first
+
+  ### 2. Logical Attack Progression
+  Follow typical attack lifecycle order:
+  1. **Reconnaissance** (if present) - Information gathering
+  2. **Initial Access** - Entry point establishment
+  3. **Execution** - Running code on target
+  4. **Persistence** - Maintaining access (early persistence)
+  5. **Privilege Escalation** - Gaining higher privileges
+  6. **Defense Evasion** - Avoiding detection (can be ongoing)
+  7. **Credential Access** - Stealing credentials (after escalation for better access)
+  8. **Discovery** - Internal reconnaissance (after gaining foothold)
+  9. **Lateral Movement** - Spreading to other systems (requires credentials/privileges)
+  10. **Collection** - Gathering target data (after reaching targets)
+  11. **Exfiltration** - Stealing data out (after collection)
+  12. **Impact** - Final damage (if present)
+
+  **Note**: Exclude "Command and Control" tactic - C2 infrastructure is provided by Caldera framework
+
+  ### 3. Dependency Analysis
+  - If goal A provides resources needed for goal B → A must precede B
+  - Examples:
+    * Credential harvesting → Lateral movement (credentials enable movement)
+    * Discovery → Lateral movement (need to know targets before moving)
+    * Collection → Exfiltration (need to collect before exfiltrating)
+
+  ### 4. Merge Similar Goals
+  - If multiple goals represent the same tactical objective, merge or deduplicate them
+  - Keep the most descriptive version
+
+  ## Required Output Structure
+
+  ```yaml
+  attack_goals:
+    # Goals reorganized in LOGICAL attack order (not discovery order!)
+    # Consider privilege requirements and dependencies
+    - goal: "..."
+      tactic: "..."
+      description: "..."
+
+  mitre_tactics:
+    # Ordered list of unique tactics in chronological flow order
+    - "tactic1"
+    - "tactic2"
+
+  attack_flow_summary:
+    # One-line chronological summary
+    # Format: "Stage1 → Stage2 → Stage3 → ..."
+
+  required_capabilities:
+    # General capability categories needed (alphabetical order)
+    - "capability1"
+    - "capability2"
+  ```
+
+  ## Example Reordering
+
+  **Input (discovery order):**
+  - Lateral movement to internal systems
+  - Privilege escalation to admin
+  - Data collection
+  - Initial access via web app
+
+  **Output (logical order):**
+  - Initial access via web app
+  - Privilege escalation to admin
+  - Lateral movement to internal systems (now has admin rights)
+  - Data collection
+
+  **Important**: Your output must reflect the ACTUAL goals provided, not the example. Reorder them logically while preserving all goals.
+
+  **Output YAML only. No explanations.**

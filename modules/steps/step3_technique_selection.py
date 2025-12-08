@@ -9,11 +9,13 @@ from typing import Dict, List
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from modules.ai.factory import get_llm_client
+from modules.prompts.manager import PromptManager
 
 
 class TechniqueSelector:
     def __init__(self):
         self.llm = get_llm_client()
+        self.prompt_manager = PromptManager()
 
     def select_techniques(self, input_file: str, output_file: str):
         """Select final technique from candidates for each node"""
@@ -127,34 +129,16 @@ class TechniqueSelector:
 
         # Use AI to select based on environment context
         try:
-            prompt = f"""Select the most appropriate MITRE ATT&CK technique for this attack step.
+            env_specific_yaml = yaml.dump(env_specific, allow_unicode=True)
+            candidates_yaml = yaml.dump(candidates, allow_unicode=True)
 
-# Attack Step
-
-Name: {name}
-Description: {description}
-
-Environment Details:
-{yaml.dump(env_specific, allow_unicode=True)}
-
-# Candidate Techniques
-
-{yaml.dump(candidates, allow_unicode=True)}
-
-# Task
-
-Select the MOST appropriate technique ID based on:
-1. Match with actual actions in environment_specific (commands, tools, methods)
-2. Alignment with attack step description
-3. MITRE ATT&CK technique definition accuracy
-
-Output JSON only:
-```json
-{{
-  "selected_id": "T####",
-  "reason": "Brief reason (1 sentence)"
-}}
-```"""
+            prompt = self.prompt_manager.render(
+                "step3_select_technique.yaml",
+                name=name,
+                description=description,
+                env_specific=env_specific_yaml,
+                candidates=candidates_yaml
+            )
 
             response_text = self.llm.generate_text(prompt=prompt, max_tokens=500)
 
@@ -227,29 +211,10 @@ Output JSON only:
         """비어있는 노드들의 commands를 일괄 생성"""
         nodes_yaml = yaml.dump(missing_nodes, allow_unicode=True, sort_keys=False)
 
-        prompt = f"""Generate PowerShell commands for nodes missing commands field.
-
-# Nodes Missing Commands
-{nodes_yaml}
-
-# Requirements
-1. **Single Line**: All commands MUST be ONE line (use semicolons, no line breaks)
-2. **PowerShell 5.1**: Avoid -Form, -SkipCertificateCheck
-3. **Self-Contained**: Include ALL steps in one command (no variable sharing)
-4. **Use Environment Details**: Use information from environment_specific field
-
-# Output Format
-Return YAML with ONLY the node id and commands field:
-
-```yaml
-- id: "node_001"
-  commands: "$var=value;Invoke-Command ..."
-- id: "node_002"
-  commands: "Copy-Item ...;Invoke-WebRequest ..."
-```
-
-**Output YAML only. No explanations.**
-"""
+        prompt = self.prompt_manager.render(
+            "step3_generate_commands.yaml",
+            nodes_yaml=nodes_yaml
+        )
 
         try:
             response_text = self.llm.generate_text(prompt=prompt, max_tokens=8000)

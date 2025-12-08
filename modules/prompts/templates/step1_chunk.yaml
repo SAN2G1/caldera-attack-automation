@@ -1,0 +1,44 @@
+description: "청크 단위로 새로운 공격 목표 추출"
+
+prompt: |
+  You are analyzing a KISA threat intelligence report chunk-by-chunk to extract attack goals.
+
+  # Overview
+  {overview}
+
+  {previous_context}
+  # Current Chunk ({chunk_num}/{total_chunks})
+  {chunk}
+
+  # Task
+  Analyze this chunk and identify any **NEW** attack goals not yet found.
+
+  For each new goal found:
+  1. What tactical objective does it represent?
+  2. Which MITRE ATT&CK tactic does it map to?
+  3. Brief description of its role in the attack chain
+
+  Focus on:
+  - Goals NOT already in the "Previously Identified Goals" list
+  - Environment-independent objectives (no IPs, URLs, credentials, specific tools)
+  - MITRE ATT&CK tactics: reconnaissance, initial-access, execution, persistence, privilege-escalation, defense-evasion, credential-access, discovery, lateral-movement, collection, command-and-control, exfiltration, impact
+
+  ## Output Format (JSON only)
+
+  ```json
+  {{
+    "new_goals": [
+      {{
+        "goal": "Clear description of attack objective",
+        "tactic": "MITRE ATT&CK tactic name",
+        "description": "Brief explanation"
+      }}
+    ],
+    "report_complete": true/false
+  }}
+  ```
+
+  - `new_goals`: Array of NEW goals found in this chunk (empty array [] if none)
+  - `report_complete`: true if this chunk indicates end of attack description, false otherwise
+
+  **Output JSON only. No explanations.**
