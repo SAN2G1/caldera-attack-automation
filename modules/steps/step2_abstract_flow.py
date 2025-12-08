@@ -1,5 +1,5 @@
 """
-Module 1: Abstract Attack Flow Extraction
+Module 2: Abstract Attack Flow Extraction
 Extract environment-independent abstract attack flow from KISA report
 Uses 2-stage extraction: overview → detailed flow
 """
@@ -26,16 +26,16 @@ class AbstractFlowExtractor:
         1. Extract overview to understand attack theme
         2. Process detailed content in chunks to extract complete attack flow
         """
-        print("\n[Step 1] Abstract Attack Flow Extraction started...")
+        print("\n[Step 2] Abstract Attack Flow Extraction started...")
 
         with open(input_file, 'r', encoding='utf-8') as f:
-            step0_data = yaml.safe_load(f)
+            step1_data = yaml.safe_load(f)
 
-        # Extract pages text from step0
-        pages = step0_data.get('pages', [])
+        # Extract pages text from step1
+        pages = step1_data.get('pages', [])
 
         if not pages:
-            raise ValueError("No pages found in Step 0 output")
+            raise ValueError("No pages found in Step 1 output")
 
         # Combine all page texts
         full_text = "\n\n".join([page.get('text', '') for page in pages])
@@ -54,7 +54,7 @@ class AbstractFlowExtractor:
         output_data = {
             'metadata': {
                 'source': input_file,
-                'step': 1,
+                'step': 2,
                 'description': 'Environment-independent abstract attack flow'
             },
             'abstract_flow': abstract_flow
@@ -75,7 +75,7 @@ class AbstractFlowExtractor:
         overview_chunk = full_text[:3000]
 
         prompt = self.prompt_manager.render(
-            "step1_overview.yaml",
+            "step2_overview.yaml",
             overview_chunk=overview_chunk
         )
 
@@ -136,7 +136,7 @@ class AbstractFlowExtractor:
 """
 
         return self.prompt_manager.render(
-            "step1_chunk.yaml",
+            "step2_chunk.yaml",
             overview=overview,
             previous_context=previous_context,
             chunk_num=chunk_num,
@@ -169,7 +169,7 @@ class AbstractFlowExtractor:
         collected_goals_yaml = yaml.dump(collected_goals, allow_unicode=True)
 
         prompt = self.prompt_manager.render(
-            "step1_synthesize.yaml",
+            "step2_synthesize.yaml",
             overview=overview,
             collected_goals=collected_goals_yaml
         )

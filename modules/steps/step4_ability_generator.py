@@ -49,7 +49,7 @@ class AbilityGenerator:
         """Caldera Ability 생성 (전처리 + 최소 AI)"""
         print("\n[Step 4] Caldera Ability 생성 시작...")
 
-        # Step 3 데이터 로드
+        # Load concrete flow data from Step 3
         with open(input_file, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
 
@@ -127,18 +127,18 @@ class AbilityGenerator:
         node_name = node['name']
         node_type = node.get('type', 'execution')
 
-        # Step 3에서 선택된 technique
+        # Get technique (auto-selected in Step 3)
         technique = node.get('technique', {})
         technique_id = technique.get('id', 'T0000')
         technique_name = technique.get('name', 'Unknown')
 
-        # Step 2에서 생성된 정보
+        # Get node details
         description = node.get('description', f"Execute {node_name}")
         environment_specific = node.get('environment_specific', {})
 
         print(f"  [생성 중] {node_id}. {node_name} ({technique_id})")
 
-        # 1. Command 추출 (Step 3에서 생성된 것 사용)
+        # 1. Extract command (generated in Step 3)
         if 'commands' in environment_specific and environment_specific['commands']:
             existing_commands = environment_specific['commands']
             if isinstance(existing_commands, list):
@@ -146,8 +146,8 @@ class AbilityGenerator:
             else:
                 command = existing_commands
         else:
-            print(f"  [WARNING] {node_name} No commands found in Step 3 - 스킵")
-            self.failed_nodes.append({'id': node_id, 'name': node_name, 'reason': 'No commands in Step 3'})
+            print(f"  [WARNING] {node_name} No commands found - skipping")
+            self.failed_nodes.append({'id': node_id, 'name': node_name, 'reason': 'No commands found'})
             return None
 
         # 2. 전처리: Payload 파일 추출
@@ -173,7 +173,7 @@ class AbilityGenerator:
 
         # 5. 전처리: Ability 구조 생성
         ability_id = self._generate_uuid(node_id, node_name)
-        # Node에서 직접 tactic 가져오기 (Step 2/3에서 생성됨)
+        # Get tactic from node
         tactic = node.get('tactic', 'execution')
 
         ability = {

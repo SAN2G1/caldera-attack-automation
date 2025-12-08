@@ -1,5 +1,5 @@
 """
-Module 7: Offline Self-Correcting Engine
+Module 5: Offline Self-Correcting Engine
 로컬에서 Operation 로그를 분석하여 실패한 Ability를 자동으로 수정
 
 워크플로우:
@@ -173,7 +173,7 @@ class AbilityFixer:
         stdout_preview = failed.stdout[:1000] if failed.stdout else "(없음)"
 
         return self.prompt_manager.render(
-            "step7_fix_ability.yaml",
+            "step5_fix_ability.yaml",
             ability_id=failed.ability_id,
             ability_name=failed.ability_name,
             tactic=failed.tactic,
@@ -264,7 +264,7 @@ class OfflineCorrector:
             수정 결과 리포트
         """
         print("=" * 70)
-        print("M7: Offline Self-Correcting Engine")
+        print("Module 5: Offline Self-Correcting Engine")
         print("=" * 70)
 
         # 1. 데이터 로드
@@ -533,15 +533,15 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="M7: Offline Self-Correcting Engine",
+        description="Module 5: Offline Self-Correcting Engine",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""
 예시:
   # Report에서 adversary_id로 자동 탐색
-  python -m modules.module7_self_correcting --report report.json --env environment_description.md
+  python -m modules.steps.step5_self_correcting --report report.json --env environment_description.md
 
   # abilities 경로 직접 지정
-  python -m modules.module7_self_correcting --abilities data/processed/20251203/caldera/abilities.yml --report report.json --env environment_description.md
+  python -m modules.steps.step5_self_correcting --abilities data/processed/20251203/caldera/abilities.yml --report report.json --env environment_description.md
 """
     )
 

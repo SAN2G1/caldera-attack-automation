@@ -3,22 +3,28 @@ KISA TTPs → Caldera Adversary Pipeline
 전체 파이프라인 실행 엔트리포인트
 
 실행 모드:
-- 일반 모드: --step 0~5 또는 범위 지정 (예: 0~2)
+- 일반 모드: --step 1~5 또는 범위 지정 (예: 1~3)
 """
 
 import os
 import argparse
 import sys
+import json
 from pathlib import Path
 from datetime import datetime
 
 # 모듈 임포트
-from modules.steps.step0_pdf_processing import PDFProcessor
-from modules.steps.step1_abstract_flow import AbstractFlowExtractor
-from modules.steps.step2_concrete_flow import ConcreteFlowGenerator
-from modules.steps.step3_technique_selection import TechniqueSelector
+from modules.steps.step1_pdf_processing import PDFProcessor
+from modules.steps.step2_abstract_flow import AbstractFlowExtractor
+from modules.steps.step3_concrete_flow import ConcreteFlowGenerator
 from modules.steps.step4_ability_generator import AbilityGenerator
-from modules.steps.step5_visualization import AbilityFlowVisualizer
+from modules.steps.step5_self_correcting import OfflineCorrector
+from modules.caldera.uploader import CalderaUploader
+from modules.caldera.executor import CalderaExecutor
+from modules.caldera.reporter import CalderaReporter
+from modules.core.config import get_caldera_url, get_caldera_api_key
+import yaml
+import time
 
 
 def parse_step_range(step_arg):
@@ -26,13 +32,13 @@ def parse_step_range(step_arg):
     --step 인자 파싱
 
     Examples:
-        "0"     → [0]
-        "0~3"   → [0, 1, 2, 3]
+        "1"     → [1]
+        "1~3"   → [1, 2, 3]
         "2~5"   → [2, 3, 4, 5]
-        "all"   → [0, 1, 2, 3, 4, 5]
+        "all"   → [1, 2, 3, 4, 5]
     """
     if step_arg == "all":
-        return [0, 1, 2, 3, 4, 5]
+        return [1, 2, 3, 4, 5]
 
     if "~" in step_arg:
         # 범위 지정
@@ -66,17 +72,16 @@ def main():
         type=str,
         required=True,
         help="""Step 선택 (단일 또는 범위):
-  0      : PDF 처리 (텍스트 추출)
-  1      : 추상 공격 흐름 추출 (환경 독립적)
-  2      : 구체적 공격 흐름 생성 (환경 적용, Technique 후보)
-  3      : Technique 최종 선택 (Top 3 → Final 1)
+  1      : PDF 처리 (텍스트 추출)
+  2      : 추상 공격 흐름 추출 (환경 독립적)
+  3      : 구체적 공격 흐름 생성 (환경 적용, Technique 자동 선택)
   4      : Caldera Ability 생성
-  5      : Kill Chain 시각화
-  all    : 전체 실행
+  5      : Caldera 자동화 (업로드 → 실행 → Self-Correcting)
+  all    : 전체 실행 (1~5)
 
   범위 지정:
-  0~2    : Step 0, 1, 2 실행
-  2~5    : Step 2, 3, 4, 5 실행
+  1~3    : Step 1, 2, 3 실행
+  3~5    : Step 3, 4, 5 실행
 """
     )
 
@@ -84,13 +89,38 @@ def main():
     parser.add_argument(
         "--pdf",
         type=str,
-        help="입력 PDF 파일 경로 (Step 0에서 필수)"
+        help="입력 PDF 파일 경로 (Step 1에서 필수)"
     )
 
     parser.add_argument(
         "--env",
         type=str,
-        help="환경 설명 MD 파일 경로 (Step 2에서 필수)"
+        help="환경 설명 MD 파일 경로 (Step 3에서 필수)"
+    )
+
+    parser.add_argument(
+        "--agent-paw",
+        type=str,
+        default=None,
+        help="Caldera Agent PAW (생략 시 모든 에이전트 대상, 예: agent123)"
+    )
+
+    parser.add_argument(
+        "--skip-upload",
+        action="store_true",
+        help="Step 5에서 업로드 단계 건너뛰기 (이미 업로드된 경우)"
+    )
+
+    parser.add_argument(
+        "--skip-execution",
+        action="store_true",
+        help="Step 5에서 자동 실행 건너뛰기 (수동으로 Operation 실행 후 리포트만 사용)"
+    )
+
+    parser.add_argument(
+        "--operation-name",
+        type=str,
+        help="Step 5에서 사용할 Operation 이름 (기본: Auto-Operation-<timestamp>)"
     )
 
     parser.add_argument(
@@ -126,49 +156,49 @@ def main():
     print(f"결과 저장 위치: {timestamped_output_dir}")
     print("="*70)
 
-    # Step 0: PDF Processing
-    if 0 in steps:
-        if not args.pdf:
-            print("[ERROR] Step 0 실행 시 --pdf 인자가 필요합니다")
-            sys.exit(1)
-
-        print("\n[Step 0] PDF Processing")
-        print("-" * 70)
-
-        step0_output = f"{timestamped_output_dir}/step0_parsed.yml"
-        processor = PDFProcessor()
-        processor.process_pdf(args.pdf, step0_output)
-
-    # Step 1: Abstract Flow Extraction
+    # Step 1: PDF Processing
     if 1 in steps:
-        print("\n[Step 1] Abstract Attack Flow Extraction")
-        print("-" * 70)
-
-        step0_output = f"{timestamped_output_dir}/step0_parsed.yml"
-        step1_output = f"{timestamped_output_dir}/step1_abstract_flow.yml"
-
-        if not Path(step0_output).exists():
-            print(f"[ERROR] {step0_output} 파일이 없습니다. Step 0을 먼저 실행하세요.")
+        if not args.pdf:
+            print("[ERROR] Step 1 실행 시 --pdf 인자가 필요합니다")
             sys.exit(1)
 
-        extractor = AbstractFlowExtractor()
-        extractor.extract_abstract_flow(step0_output, step1_output)
+        print("\n[Step 1] PDF Processing")
+        print("-" * 70)
 
-    # Step 2: Concrete Flow Generation
+        step1_output = f"{timestamped_output_dir}/step1_parsed.yml"
+        processor = PDFProcessor()
+        processor.process_pdf(args.pdf, step1_output)
+
+    # Step 2: Abstract Flow Extraction
     if 2 in steps:
-        if not args.env:
-            print("[ERROR] Step 2 실행 시 --env 인자가 필요합니다")
-            print("예: --env environment_description.md")
-            sys.exit(1)
-
-        print("\n[Step 2] Concrete Attack Flow Generation")
+        print("\n[Step 2] Abstract Attack Flow Extraction")
         print("-" * 70)
 
-        step1_output = f"{timestamped_output_dir}/step1_abstract_flow.yml"
-        step2_output = f"{timestamped_output_dir}/step2_concrete_flow.yml"
+        step1_output = f"{timestamped_output_dir}/step1_parsed.yml"
+        step2_output = f"{timestamped_output_dir}/step2_abstract_flow.yml"
 
         if not Path(step1_output).exists():
             print(f"[ERROR] {step1_output} 파일이 없습니다. Step 1을 먼저 실행하세요.")
+            sys.exit(1)
+
+        extractor = AbstractFlowExtractor()
+        extractor.extract_abstract_flow(step1_output, step2_output)
+
+    # Step 3: Concrete Flow Generation with Technique Selection
+    if 3 in steps:
+        if not args.env:
+            print("[ERROR] Step 3 실행 시 --env 인자가 필요합니다")
+            print("예: --env environment_description.md")
+            sys.exit(1)
+
+        print("\n[Step 3] Concrete Attack Flow Generation (with Technique Selection)")
+        print("-" * 70)
+
+        step2_output = f"{timestamped_output_dir}/step2_abstract_flow.yml"
+        step3_output = f"{timestamped_output_dir}/step3_concrete_flow.yml"
+
+        if not Path(step2_output).exists():
+            print(f"[ERROR] {step2_output} 파일이 없습니다. Step 2를 먼저 실행하세요.")
             sys.exit(1)
 
         if not Path(args.env).exists():
@@ -176,49 +206,29 @@ def main():
             sys.exit(1)
 
         generator = ConcreteFlowGenerator()
-        generator.generate_concrete_flow(step1_output, args.env, step2_output)
-
-    # Step 3: Technique Selection
-    if 3 in steps:
-        print("\n[Step 3] Technique Selection")
-        print("-" * 70)
-
-        step2_output = f"{timestamped_output_dir}/step2_concrete_flow.yml"
-        step3_output = f"{timestamped_output_dir}/step3_technique_selected.yml"
-
-        if not Path(step2_output).exists():
-            print(f"[ERROR] {step2_output} 파일이 없습니다. Step 2를 먼저 실행하세요.")
-            sys.exit(1)
-
-        selector = TechniqueSelector()
-        selector.select_techniques(step2_output, step3_output)
+        generator.generate_concrete_flow(step2_output, args.env, step3_output)
 
     # Step 4: Caldera Ability Generation
     if 4 in steps:
         print("\n[Step 4] Caldera Ability Generation")
         print("-" * 70)
 
-        step3_output = f"{timestamped_output_dir}/step3_technique_selected.yml"
-        step2_output = f"{timestamped_output_dir}/step2_concrete_flow.yml"
+        step3_output = f"{timestamped_output_dir}/step3_concrete_flow.yml"
 
-        # Step 3가 없으면 Step 2 사용
-        input_file = step3_output if Path(step3_output).exists() else step2_output
-
-        if not Path(input_file).exists():
-            print(f"[ERROR] {input_file} 파일이 없습니다.")
+        if not Path(step3_output).exists():
+            print(f"[ERROR] {step3_output} 파일이 없습니다. Step 3을 먼저 실행하세요.")
             sys.exit(1)
 
         caldera_output_dir = f"{timestamped_output_dir}/caldera"
 
         generator = AbilityGenerator()
-        generator.generate_abilities(input_file, caldera_output_dir)
+        generator.generate_abilities(step3_output, caldera_output_dir)
 
-    # Step 5: Kill Chain Visualization
+    # Step 5: Caldera Automation (Upload → Execute → Self-Correct)
     if 5 in steps:
-        print("\n[Step 5] Kill Chain Visualization")
+        print("\n[Step 5] Caldera 자동화 (업로드 → 실행 → Self-Correcting)")
         print("-" * 70)
 
-        # Caldera 출력 디렉토리에서 abilities.yml과 adversaries.yml 사용
         caldera_output_dir = f"{timestamped_output_dir}/caldera"
         abilities_file = f"{caldera_output_dir}/abilities.yml"
         adversaries_file = f"{caldera_output_dir}/adversaries.yml"
@@ -231,10 +241,201 @@ def main():
             print("[ERROR] adversaries.yml 파일이 없습니다. Step 4를 먼저 실행하세요.")
             sys.exit(1)
 
-        visualization_dir = f"{timestamped_output_dir}/visualizations"
+        # 환경 설명 파일 확인
+        if not args.env or not Path(args.env).exists():
+            print("[ERROR] --env 인자로 환경 설명 파일을 지정해야 합니다.")
+            sys.exit(1)
 
-        visualizer = AbilityFlowVisualizer()
-        visualizer.visualize_abilities(abilities_file, adversaries_file, visualization_dir)
+        # 5-1. Caldera 업로드
+        uploaded_adversary_id = None
+        if not args.skip_upload:
+            print("\n[5-1] Caldera 업로드")
+            print("-" * 70)
+
+            uploader = CalderaUploader()
+            uploader.upload_abilities(abilities_file)
+            adversary_ids = uploader.upload_adversaries(adversaries_file)
+
+            if not adversary_ids:
+                print("[ERROR] Adversary 업로드 실패")
+                sys.exit(1)
+
+            uploaded_adversary_id = adversary_ids[0]
+            print(f"\n[OK] Adversary 업로드 완료: {uploaded_adversary_id}")
+        else:
+            # adversaries.yml에서 ID 읽기
+            with open(adversaries_file, 'r', encoding='utf-8') as f:
+                adversaries = yaml.safe_load(f)
+                if adversaries:
+                    uploaded_adversary_id = adversaries[0].get('adversary_id')
+            print(f"\n[SKIP] 업로드 건너뜀. Adversary ID: {uploaded_adversary_id}")
+
+        # 5-2. Operation 실행
+        operation_report_file = None
+        if not args.skip_execution:
+            print("\n[5-2] Operation 생성 및 실행")
+            print("-" * 70)
+
+            if args.agent_paw:
+                print(f"  대상 Agent: {args.agent_paw}")
+            else:
+                print("  대상 Agent: 모든 연결된 에이전트")
+
+            operation_name = args.operation_name or f"Auto-Operation-{timestamp}"
+
+            executor = CalderaExecutor(get_caldera_url(), get_caldera_api_key())
+
+            # Operation 생성
+            print(f"  Operation 생성 중: {operation_name}")
+            op_id = executor.create_operation(operation_name, uploaded_adversary_id, args.agent_paw)
+            print(f"  [OK] Operation ID: {op_id}")
+
+            # Operation 시작
+            print(f"  Operation 시작 중...")
+            executor.start_operation(op_id)
+            print(f"  [OK] Operation 실행 시작")
+
+            # 완료 대기
+            print(f"  Operation 완료 대기 중 (최대 10분)...")
+            completed = executor.wait_for_completion(op_id, timeout=600)
+
+            if not completed:
+                print(f"  [WARNING] Operation이 10분 내에 완료되지 않았습니다.")
+                print(f"  [INFO] 수동으로 확인 후 진행하세요.")
+            else:
+                print(f"  [OK] Operation 완료")
+
+            # 5-3. 결과 수집
+            print("\n[5-3] 결과 수집")
+            print("-" * 70)
+
+            reporter = CalderaReporter()
+            report = reporter.collect_full_outputs(op_id)
+
+            if not report:
+                print("[ERROR] Operation 결과 수집 실패")
+                sys.exit(1)
+
+            # 리포트 저장
+            operation_report_file = f"{caldera_output_dir}/operation_report.json"
+            reporter.save_report(report, operation_report_file)
+            print(f"\n[OK] 리포트 저장: {operation_report_file}")
+        else:
+            print("\n[SKIP] 자동 실행 건너뜀")
+            print("[INFO] 수동으로 Operation을 실행한 후,")
+            print("[INFO] operation_report.json을 caldera/ 디렉토리에 저장하세요.")
+
+            # 기존 리포트 파일 확인
+            operation_report_file = f"{caldera_output_dir}/operation_report.json"
+            if not Path(operation_report_file).exists():
+                print(f"\n[ERROR] {operation_report_file} 파일이 없습니다.")
+                print("[INFO] Operation 실행 후 리포트를 저장하고 다시 실행하세요.")
+                sys.exit(1)
+
+        # 5-4. Self-Correcting
+        print("\n[5-4] Self-Correcting (실패한 Ability 수정)")
+        print("-" * 70)
+
+        # 첫 번째 실행 통계 저장
+        with open(operation_report_file, 'r', encoding='utf-8') as f:
+            first_report = json.load(f)
+
+        # 첫 번째 실행 통계 계산
+        first_stats = first_report.get('statistics', {})
+        first_total = first_stats.get('total_abilities', 0)
+        first_success = first_stats.get('success', 0)
+        first_failed = first_stats.get('failed', 0)
+
+        corrector = OfflineCorrector()
+        correction_report = corrector.run(
+            abilities_file=abilities_file,
+            operation_report_file=operation_report_file,
+            env_description_file=args.env,
+            output_dir=caldera_output_dir
+        )
+
+        # 수정된 ability 개수 확인
+        corrected_count = correction_report.get('summary', {}).get('corrected', 0)
+
+        if corrected_count > 0:
+            print(f"\n[5-5] 수정된 Ability 재업로드 및 재실행")
+            print("-" * 70)
+
+            # 수정된 abilities 재업로드
+            print("  수정된 abilities 재업로드 중...")
+            uploader = CalderaUploader()
+            uploader.upload_abilities(abilities_file)
+            print("  [OK] 재업로드 완료")
+
+            if not args.skip_execution:
+                # 새로운 Operation 생성 및 실행
+                operation_name_retry = f"{operation_name}-Retry"
+                print(f"  새 Operation 생성 중: {operation_name_retry}")
+
+                executor = CalderaExecutor(get_caldera_url(), get_caldera_api_key())
+                op_id_retry = executor.create_operation(operation_name_retry, uploaded_adversary_id, args.agent_paw)
+                print(f"  [OK] Operation ID: {op_id_retry}")
+
+                # Operation 시작
+                print(f"  Operation 시작 중...")
+                executor.start_operation(op_id_retry)
+                print(f"  [OK] Operation 실행 시작")
+
+                # 완료 대기
+                print(f"  Operation 완료 대기 중 (최대 10분)...")
+                completed = executor.wait_for_completion(op_id_retry, timeout=600)
+
+                if completed:
+                    print(f"  [OK] Operation 완료")
+
+                    # 재실행 결과 수집
+                    reporter = CalderaReporter()
+                    retry_report = reporter.collect_full_outputs(op_id_retry)
+
+                    if retry_report:
+                        # 재실행 리포트 저장
+                        retry_report_file = f"{caldera_output_dir}/operation_report_retry.json"
+                        reporter.save_report(retry_report, retry_report_file)
+                        print(f"  [OK] 재실행 리포트 저장: {retry_report_file}")
+
+                        # 재실행 통계 계산
+                        retry_stats = retry_report.get('statistics', {})
+                        retry_total = retry_stats.get('total_abilities', 0)
+                        retry_success = retry_stats.get('success', 0)
+                        retry_failed = retry_stats.get('failed', 0)
+
+                        # 성공률 비교 출력
+                        print("\n" + "="*70)
+                        print("성공률 비교")
+                        print("="*70)
+                        print(f"{'구분':<20} {'전체':<10} {'성공':<10} {'실패':<10} {'성공률':<10}")
+                        print("-"*70)
+
+                        first_rate = (first_success / first_total * 100) if first_total > 0 else 0
+                        retry_rate = (retry_success / retry_total * 100) if retry_total > 0 else 0
+
+                        print(f"{'첫 번째 실행':<20} {first_total:<10} {first_success:<10} {first_failed:<10} {first_rate:.1f}%")
+                        print(f"{'재실행 (수정 후)':<20} {retry_total:<10} {retry_success:<10} {retry_failed:<10} {retry_rate:.1f}%")
+
+                        improvement = retry_rate - first_rate
+                        if improvement > 0:
+                            print(f"\n✓ 성공률 개선: +{improvement:.1f}% ({first_success} → {retry_success} 성공)")
+                        elif improvement < 0:
+                            print(f"\n✗ 성공률 감소: {improvement:.1f}%")
+                        else:
+                            print(f"\n- 성공률 동일")
+                        print("="*70)
+                    else:
+                        print("  [WARNING] 재실행 결과 수집 실패")
+                else:
+                    print(f"  [WARNING] 재실행이 10분 내에 완료되지 않았습니다.")
+            else:
+                print("  [INFO] --skip-execution 옵션으로 자동 재실행을 건너뜁니다.")
+                print("  [INFO] 수동으로 재실행 후 결과를 확인하세요.")
+        else:
+            print("\n[INFO] 수정된 Ability가 없어 재실행을 건너뜁니다.")
+
+        print("\n[OK] Step 5 완료!")
 
     print("\n" + "="*70)
     print("[SUCCESS] 완료!")

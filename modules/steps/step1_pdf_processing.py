@@ -33,7 +33,7 @@ class PDFProcessor:
         }
 
         if output_path is None:
-            output_path = "data/processed/step0_parsed.yml"
+            output_path = "data/processed/step1_parsed.yml"
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:

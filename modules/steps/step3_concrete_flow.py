@@ -1,5 +1,5 @@
 """
-Module 2: Concrete Attack Flow Generation
+Module 3: Concrete Attack Flow Generation
 Combine abstract flow + environment description (MD) → concrete attack flow (Kill Chain)
 """
 
@@ -72,7 +72,7 @@ class ConcreteFlowGenerator:
                     'abstract_flow': abstract_flow_file,
                     'environment': environment_md_file
                 },
-                'step': 2,
+                'step': 3,
                 'description': 'Concrete attack flow (Kill Chain) with environment-specific details',
                 'caldera_payloads': caldera_payloads  # Caldera payload 목록 추가
             },
@@ -93,7 +93,7 @@ class ConcreteFlowGenerator:
         abstract_flow_yaml = yaml.dump(abstract_flow, allow_unicode=True)
 
         prompt = self.prompt_manager.render(
-            "step2_generate_flow.yaml",
+            "step3_generate_flow.yaml",
             abstract_flow=abstract_flow_yaml,
             environment_description=environment_description
         )
@@ -111,40 +111,42 @@ class ConcreteFlowGenerator:
 
 
     def _add_technique_ids(self, flow: Dict) -> Dict:
-        """Add MITRE ATT&CK Technique ID candidates to nodes using mitreattack-python"""
+        """Add MITRE ATT&CK Technique ID (best match) to nodes using mitreattack-python"""
         if not self.mitre_data:
             print("  [WARNING] MITRE ATT&CK data not available, skipping technique ID assignment")
             return flow
 
-        print("  [Adding MITRE ATT&CK Technique ID candidates (top 3)...]")
+        print("  [Adding MITRE ATT&CK Technique IDs (best match)...]")
 
         nodes = flow.get('nodes', [])
-        candidates_added = 0
-        no_candidates = 0
+        techniques_added = 0
+        no_technique = 0
 
         for node in nodes:
             tactic = node.get('tactic', '').lower().replace('-', '_')
             name = node.get('name', '')
             description = node.get('description', '')
 
-            # Get top 3 technique candidates
-            candidates = self._find_technique_candidates(tactic, name, description, top_k=3)
+            # Get best matching technique (only 1)
+            candidates = self._find_technique_candidates(tactic, name, description, top_k=1)
 
             if candidates:
-                node['technique_candidates'] = candidates
-                candidates_added += 1
+                # Assign the best technique directly
+                best_technique = candidates[0]
+                node['technique'] = {
+                    'id': best_technique['id'],
+                    'name': best_technique['name']
+                }
+                techniques_added += 1
             else:
                 # Use placeholder if no candidates found
-                node['technique_candidates'] = [
-                    {
-                        'id': 'T0000',
-                        'name': 'Unknown',
-                        'score': 0
-                    }
-                ]
-                no_candidates += 1
+                node['technique'] = {
+                    'id': 'T0000',
+                    'name': 'Unknown'
+                }
+                no_technique += 1
 
-        print(f"  [OK] Nodes with candidates: {candidates_added}, No candidates: {no_candidates}")
+        print(f"  [OK] Nodes with techniques: {techniques_added}, No technique: {no_technique}")
         return flow
 
     def _find_technique_candidates(self, tactic: str, name: str, description: str, top_k: int = 3) -> List[Dict]:
@@ -243,15 +245,12 @@ class ConcreteFlowGenerator:
             for i, node_id in enumerate(flow['execution_order'], 1):
                 node = next((n for n in nodes if n['id'] == node_id), None)
                 if node:
-                    candidates = node.get('technique_candidates', [])
-                    if candidates:
-                        top_candidate = candidates[0]
-                        candidate_str = f"{top_candidate['id']} (score: {top_candidate['score']})"
-                        if len(candidates) > 1:
-                            candidate_str += f" +{len(candidates)-1} more"
-                        print(f"  {i}. {node.get('name', 'Unknown')} [{node.get('tactic', 'unknown')}] ({candidate_str})")
+                    technique = node.get('technique', {})
+                    if technique and technique.get('id') != 'T0000':
+                        technique_str = f"{technique['id']} ({technique.get('name', 'Unknown')})"
+                        print(f"  {i}. {node.get('name', 'Unknown')} [{node.get('tactic', 'unknown')}] ({technique_str})")
                     else:
-                        print(f"  {i}. {node.get('name', 'Unknown')} [{node.get('tactic', 'unknown')}] (no candidates)")
+                        print(f"  {i}. {node.get('name', 'Unknown')} [{node.get('tactic', 'unknown')}] (no technique)")
 
         print("\n" + "="*70)
 

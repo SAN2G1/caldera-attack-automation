@@ -2,7 +2,7 @@
 from typing import Optional
 from .base import LLMClient
 from .claude import ClaudeClient
-from modules.config import get_llm_provider
+from modules.core.config import get_llm_provider
 
 
 def get_llm_client(provider: Optional[str] = None) -> LLMClient:
@@ -22,6 +22,6 @@ def get_llm_client(provider: Optional[str] = None) -> LLMClient:
 
     if provider.lower() == "claude":
         return ClaudeClient()
-    # 추후 gpt, gemini 추가 가능
+    # Future: Add support for GPT, Gemini, etc.
     else:
         raise ValueError(f"지원하지 않는 AI 공급자: {provider}")
