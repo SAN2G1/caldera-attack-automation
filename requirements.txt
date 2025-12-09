@@ -23,3 +23,6 @@ requests==2.31.0
 
 # Visualization
 graphviz>=0.20.0
+
+# VirtualBox Remote Control
+paramiko==3.4.0

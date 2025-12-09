@@ -1,0 +1,202 @@
+import paramiko
+import time
+import os
+from dotenv import load_dotenv
+
+# .env 파일 로드
+load_dotenv()
+
+class VBoxController:
+    def __init__(self, host=None, username=None, password=None, key_file=None):
+        # 환경변수에서 읽기
+        self.host = host or os.getenv('VBOX_HOST')
+        self.username = username or os.getenv('VBOX_USERNAME')
+        self.password = password or os.getenv('VBOX_PASSWORD')
+        self.key_file = key_file or os.getenv('VBOX_KEY_FILE')
+        
+        if not self.host or not self.username:
+            raise ValueError("VBOX_HOST와 VBOX_USERNAME은 필수입니다")
+    
+    def _ssh_command(self, command):
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        try:
+            if self.key_file:
+                ssh.connect(self.host, username=self.username, key_filename=self.key_file)
+            else:
+                ssh.connect(self.host, username=self.username, password=self.password)
+            
+            stdin, stdout, stderr = ssh.exec_command(command)
+            output = stdout.read().decode()
+            error = stderr.read().decode()
+            ssh.close()
+            
+            if error and "error" in error.lower():
+                raise Exception(f"Command failed: {error}")
+            
+            return output
+        except Exception as e:
+            raise Exception(f"SSH 명령 실행 실패: {str(e)}")
+    
+    def list_vms(self):
+        """모든 VM 목록"""
+        return self._ssh_command('VBoxManage list vms')
+    
+    def list_running_vms(self):
+        """실행 중인 VM 목록"""
+        return self._ssh_command('VBoxManage list runningvms')
+    
+    def list_snapshots(self, vm_name):
+        """VM의 스냅샷 목록"""
+        return self._ssh_command(f'VBoxManage snapshot "{vm_name}" list')
+    
+    def get_vm_info(self, vm_name):
+        """VM 상세 정보"""
+        return self._ssh_command(f'VBoxManage showvminfo "{vm_name}"')
+    
+    def get_state(self, vm_name):
+        """VM 상태 확인"""
+        output = self._ssh_command(f'VBoxManage showvminfo "{vm_name}" --machinereadable')
+        for line in output.split('\n'):
+            if 'VMState=' in line:
+                return line.split('=')[1].strip('"')
+        return "unknown"
+    
+    def start_vm(self, vm_name, gui=False):
+        """VM 시작"""
+        vm_type = "gui" if gui else "headless"
+        print(f"Starting VM: {vm_name} (type: {vm_type})")
+        output = self._ssh_command(f'VBoxManage startvm "{vm_name}" --type {vm_type}')
+        print(output)
+        return output
+    
+    def stop_vm(self, vm_name, force=False):
+        """VM 종료"""
+        if force:
+            print(f"Force stopping VM: {vm_name}")
+            command = f'VBoxManage controlvm "{vm_name}" poweroff'
+        else:
+            print(f"Gracefully stopping VM: {vm_name}")
+            command = f'VBoxManage controlvm "{vm_name}" acpipowerbutton'
+        
+        output = self._ssh_command(command)
+        print(output)
+        return output
+    
+    def pause_vm(self, vm_name):
+        """VM 일시정지"""
+        print(f"Pausing VM: {vm_name}")
+        return self._ssh_command(f'VBoxManage controlvm "{vm_name}" pause')
+    
+    def resume_vm(self, vm_name):
+        """VM 재개"""
+        print(f"Resuming VM: {vm_name}")
+        return self._ssh_command(f'VBoxManage controlvm "{vm_name}" resume')
+    
+    def reset_vm(self, vm_name):
+        """VM 재시작 (리셋)"""
+        print(f"Resetting VM: {vm_name}")
+        return self._ssh_command(f'VBoxManage controlvm "{vm_name}" reset')
+    
+    def save_state(self, vm_name):
+        """VM 상태 저장 (하이버네이션)"""
+        print(f"Saving state of VM: {vm_name}")
+        return self._ssh_command(f'VBoxManage controlvm "{vm_name}" savestate')
+    
+    def restore_snapshot(self, vm_name, snapshot_name):
+        """스냅샷 복원"""
+        try:
+            # VM이 실행 중이면 종료
+            state = self.get_state(vm_name)
+            if state == "running":
+                print(f"Stopping VM: {vm_name}")
+                self.stop_vm(vm_name, force=True)
+                time.sleep(3)
+            
+            # 스냅샷 복원
+            print(f"Restoring snapshot: {snapshot_name}")
+            output = self._ssh_command(f'VBoxManage snapshot "{vm_name}" restore "{snapshot_name}"')
+            print(output)
+            time.sleep(2)
+            
+            return "Success"
+        except Exception as e:
+            return f"Error: {str(e)}"
+    
+    def restore_and_start(self, vm_name, snapshot_name, gui=False):
+        """스냅샷 복원 후 VM 시작"""
+        try:
+            # 스냅샷 복원
+            result = self.restore_snapshot(vm_name, snapshot_name)
+            if "Error" in result:
+                return result
+            
+            # VM 시작
+            self.start_vm(vm_name, gui=gui)
+            
+            return "Success"
+        except Exception as e:
+            return f"Error: {str(e)}"
+    
+    def create_snapshot(self, vm_name, snapshot_name, description=""):
+        """새 스냅샷 생성"""
+        print(f"Creating snapshot: {snapshot_name}")
+        cmd = f'VBoxManage snapshot "{vm_name}" take "{snapshot_name}"'
+        if description:
+            cmd += f' --description "{description}"'
+        return self._ssh_command(cmd)
+    
+    def delete_snapshot(self, vm_name, snapshot_name):
+        """스냅샷 삭제"""
+        print(f"Deleting snapshot: {snapshot_name}")
+        return self._ssh_command(f'VBoxManage snapshot "{vm_name}" delete "{snapshot_name}"')
+
+
+def main():
+    """메인 함수 - 사용 예시"""
+    try:
+        # 환경변수에서 자동으로 연결 설정 로드
+        controller = VBoxController()
+        
+        print("=== VM 목록 ===")
+        print(controller.list_vms())
+        
+        print("\n=== 실행 중인 VM ===")
+        print(controller.list_running_vms())
+        
+        # 환경변수에서 VM 이름 가져오기
+        vm_name = os.getenv('VBOX_VM_NAME')
+        snapshot_name = os.getenv('VBOX_SNAPSHOT_NAME')
+        
+        print(f"\n=== {vm_name} 정보 ===")
+        print(f"상태: {controller.get_state(vm_name)}")
+        
+        print(f"\n=== {vm_name} 스냅샷 목록 ===")
+        print(controller.list_snapshots(vm_name))
+        
+        # 제어 예시 (주석 처리됨)
+        # VM 시작
+        # controller.start_vm(vm_name)
+        
+        # VM 종료 (안전하게)
+        # controller.stop_vm(vm_name, force=False)
+        
+        # VM 강제 종료
+        # controller.stop_vm(vm_name, force=True)
+        
+        # 스냅샷 복원만
+        # controller.restore_snapshot(vm_name, snapshot_name)
+        
+        # 스냅샷 복원 후 시작
+        controller.restore_and_start(vm_name, snapshot_name)
+        
+        # 새 스냅샷 생성
+        # controller.create_snapshot(vm_name, "new_snapshot", "테스트 스냅샷")
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()
