@@ -46,30 +46,41 @@ def serve_agent(filename):
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
-    if "file" not in request.files:
-        return "No file part", 400
-
-    f = request.files["file"]
-    if f.filename == "":
-        return "Empty filename", 400
-
     agent_id = request.form.get("agent_id", "unknown")
     note     = request.form.get("note", "")
 
-    original_name = secure_filename(f.filename)
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    # --- CASE 1: multipart/form-data (PowerShell -Form 방식) ---
+    if "file" in request.files:
+        f = request.files["file"]
+        if f.filename == "":
+            return "Empty filename", 400
 
-    save_name = f"{ts}_{agent_id}_{original_name}"
-    save_path = os.path.join(UPLOAD_DIR, save_name)
+        original_name = secure_filename(f.filename)
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_name = f"{ts}_{agent_id}_{original_name}"
+        save_path = os.path.join(UPLOAD_DIR, save_name)
 
-    f.save(save_path)
+        f.save(save_path)
+        log_event(f"[MULTIPART] UPLOAD: agent={agent_id}, file={save_name}, note={note}")
 
-    log_event(f"UPLOAD: agent={agent_id}, file={save_name}, note={note}")
+        return jsonify({"status": "ok", "saved_as": save_name})
 
-    return jsonify({
-        "status": "ok",
-        "saved_as": save_name
-    })
+    # --- CASE 2: raw binary upload (PowerShell -InFile 방식) ---
+    if request.data:
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        # raw 업로드는 파일명이 없으므로 임시 이름 자동 생성
+        save_name = f"{ts}_{agent_id}_raw_upload.bin"
+        save_path = os.path.join(UPLOAD_DIR, save_name)
+
+        with open(save_path, "wb") as f:
+            f.write(request.data)
+
+        log_event(f"[RAW] UPLOAD: agent={agent_id}, file={save_name}, note={note}")
+
+        return jsonify({"status": "ok", "saved_as": save_name})
+
+    return "No file received", 400
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=34444)

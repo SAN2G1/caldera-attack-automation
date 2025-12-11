@@ -4,7 +4,7 @@
 
 - 웹 서버(DMZ): 192.168.56.110 (Windows 10, IIS)
 - 내부망: 192.168.56.110 (Windows 10, SMB 활성화)
-- Caldera server: 192.168.56.1:34444 (파일 유출시)
+- 공격자 서버: 192.168.56.1:34444
 
 ---
 
@@ -30,15 +30,15 @@
 - api 설명
     - GET /login?user=xxxx
       - 피싱 링크 클릭 이벤트 기록
-    - GET /agents/<file>
-      - Caldera sandcat.ps1 에이전트 파일 제공
+    - GET /agents/sandcat.ps1
+      - Caldera sandcat.ps1 에이전트 파일 다운로드
     - POST /upload
       - 피해자 PC가 유출한 파일을 공격자 서버로 업로드하는 엔드포인트
 ---
 
 ## 에이전트 설치
-- powershell -ExecutionPolicy Bypass -File sandcat.ps1
-
+- Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File C:\Windows\Temp\sandcat.ps1' -WindowStyle Hidden; Write-Output "Sandcat started"
+- 공격자 서버를 통해 다운 후 설치
 ---
 
 ## 공격 흐름
