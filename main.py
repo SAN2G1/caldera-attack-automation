@@ -12,6 +12,7 @@ import sys
 import json
 from pathlib import Path
 from datetime import datetime
+import requests
 
 # 모듈 임포트
 from modules.steps.step1_pdf_processing import PDFProcessor
@@ -59,6 +60,53 @@ def parse_step_range(step_arg):
         except ValueError:
             raise ValueError(f"Invalid step: {step_arg}")
 
+def _caldera_headers():
+    return {"KEY": get_caldera_api_key(), "Content-Type": "application/json"}
+
+def caldera_get_agents(timeout=10):
+    url = get_caldera_url().rstrip("/") + "/api/v2/agents"
+    r = requests.get(url, headers=_caldera_headers(), timeout=timeout)
+    r.raise_for_status()
+    return r.json()
+
+def caldera_kill_all_agents():
+    agents = caldera_get_agents()
+    if not agents:
+        print("[INFO] 삭제할 agent 없음")
+        return 0
+
+    print(f"[INFO] 삭제 대상 agent 수: {len(agents)}")
+    base = get_caldera_url().rstrip("/")
+
+    for a in agents:
+        paw = a.get("paw")
+        del_url = f"{base}/api/v2/agents/{paw}"
+        resp = requests.delete(del_url, headers=_caldera_headers(), timeout=10)
+        print(f"[KILL] agent {paw} → HTTP {resp.status_code}")
+
+    print("[OK] 모든 agent 삭제 완료")
+    return len(agents)
+
+def caldera_wait_for_exactly_one_agent(timeout=180, interval=5):
+    print("\n[WAIT] agent가 정확히 1개 연결될 때까지 대기 중...")
+    print(f"       (timeout={timeout}s, interval={interval}s)")
+    start = time.time()
+
+    while True:
+        agents = caldera_get_agents()
+        count = len(agents)
+        print(f"[STATUS] 현재 agent 수: {count}")
+
+        if count == 1:
+            a = agents[0]
+            print("\n[OK] agent 1개 확인됨")
+            print(f"     PAW={a.get('paw')}, host={a.get('host')}, platform={a.get('platform')}")
+            return a
+
+        if time.time() - start > timeout:
+            raise TimeoutError("agent가 1개로 수렴하지 않음 (timeout)")
+
+        time.sleep(interval)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -240,6 +288,14 @@ def main():
         print("\n[Step 5] Caldera 자동화 (업로드 → 실행 → Self-Correcting)")
         print("-" * 70)
 
+        print("\n[5-pre] Caldera agent 정리")
+        print("-" * 70)
+        try:
+            caldera_kill_all_agents()
+        except Exception as e:
+            print(f"[WARNING] agent 정리 실패: {e}")
+            print("계속 진행합니다...")
+
         # VM 재부팅
         print("\n[5-0] VM 재부팅")
         print("-" * 70)
@@ -273,6 +329,7 @@ def main():
             print("  VM 부팅 대기 중 (30초)...")
             time.sleep(30)
             print("  [OK] 모든 VM 재부팅 완료")
+            caldera_wait_for_exactly_one_agent()
 
         except Exception as e:
             print(f"  [WARNING] VM 재부팅 실패: {str(e)}")
@@ -410,6 +467,14 @@ def main():
             uploader.upload_abilities(str(abilities_file))
             print("  [OK] 재업로드 완료")
 
+            print("\n[5-pre] Caldera agent 정리")
+            print("-" * 70)
+            try:
+                caldera_kill_all_agents()
+            except Exception as e:
+                print(f"[WARNING] agent 정리 실패: {e}")
+                print("계속 진행합니다...")
+
             # VM 재부팅 (재실행 전)
             print("\n  VM 재부팅 (재실행 전)")
             print("  " + "-" * 66)
@@ -443,6 +508,7 @@ def main():
                 print("    VM 부팅 대기 중 (30초)...")
                 time.sleep(30)
                 print("    [OK] 모든 VM 재부팅 완료")
+                caldera_wait_for_exactly_one_agent()
 
             except Exception as e:
                 print(f"    [WARNING] VM 재부팅 실패: {str(e)}")
