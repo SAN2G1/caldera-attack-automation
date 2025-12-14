@@ -105,3 +105,27 @@ def get_gemini_model() -> str:
         str: Gemini model name (default: gemini-2.0-flash-exp)
     """
     return os.getenv('GEMINI_MODEL', 'gemini-2.0-flash-exp')
+
+
+def get_grok_api_key() -> str:
+    """Get xAI Grok API key from environment variable.
+
+    Returns:
+        str: xAI Grok API key
+
+    Raises:
+        ValueError: If API key is not found
+    """
+    api_key = os.getenv('XAI_API_KEY')
+    if not api_key:
+        raise ValueError("XAI_API_KEY not found in environment variables")
+    return api_key
+
+
+def get_grok_model() -> str:
+    """Get Grok model name from environment variable.
+
+    Returns:
+        str: Grok model name (default: grok-beta)
+    """
+    return os.getenv('GROK_MODEL', 'grok-beta')

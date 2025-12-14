@@ -2,6 +2,7 @@
 from typing import Optional
 import google.generativeai as genai
 from modules.core.config import get_google_api_key, get_gemini_model
+from modules.core.metrics import get_metrics_tracker
 from .base import LLMClient
 
 
@@ -10,7 +11,8 @@ class GeminiClient(LLMClient):
 
     def __init__(self):
         genai.configure(api_key=get_google_api_key())
-        self.model = genai.GenerativeModel(get_gemini_model())
+        self.model_name = get_gemini_model()
+        self.model = genai.GenerativeModel(self.model_name)
 
     def generate_text(self, prompt: str, system_prompt: Optional[str] = None, max_tokens: int = 4096) -> str:
         """Gemini를 사용하여 텍스트 생성.
@@ -41,5 +43,14 @@ class GeminiClient(LLMClient):
             full_prompt,
             generation_config=generation_config
         )
+
+        # 메트릭 추적
+        tracker = get_metrics_tracker()
+        if tracker and hasattr(response, 'usage_metadata'):
+            tracker.record_llm_call(
+                model=self.model_name,
+                input_tokens=response.usage_metadata.prompt_token_count,
+                output_tokens=response.usage_metadata.candidates_token_count
+            )
 
         return response.text

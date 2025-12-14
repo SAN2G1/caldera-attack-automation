@@ -2,6 +2,7 @@
 from typing import Optional
 import anthropic
 from modules.core.config import get_anthropic_api_key, get_claude_model
+from modules.core.metrics import get_metrics_tracker
 from .base import LLMClient
 
 
@@ -27,15 +28,25 @@ class ClaudeClient(LLMClient):
             str: 생성된 응답 텍스트.
         """
         messages = [{"role": "user", "content": prompt}]
-        
+
         kwargs = {
             "model": self.model,
             "max_tokens": max_tokens,
             "messages": messages
         }
-        
+
         if system_prompt:
             kwargs["system"] = system_prompt
 
         response = self.client.messages.create(**kwargs)
+
+        # 메트릭 추적
+        tracker = get_metrics_tracker()
+        if tracker and hasattr(response, 'usage'):
+            tracker.record_llm_call(
+                model=self.model,
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens
+            )
+
         return response.content[0].text

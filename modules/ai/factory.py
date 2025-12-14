@@ -4,6 +4,7 @@ from .base import LLMClient
 from .claude import ClaudeClient
 from .chatgpt import ChatGPTClient
 from .gemini import GeminiClient
+from .grok import GrokClient
 from modules.core.config import get_llm_provider
 
 
@@ -12,7 +13,7 @@ def get_llm_client(provider: Optional[str] = None) -> LLMClient:
 
     Args:
         provider: AI 공급자 이름. None일 경우 환경변수에서 읽음.
-                 지원되는 공급자: 'claude', 'chatgpt', 'openai', 'gemini', 'google'
+                 지원되는 공급자: 'claude', 'chatgpt', 'openai', 'gemini', 'google', 'grok', 'xai'
 
     Returns:
         LLMClient: 생성된 클라이언트 인스턴스.
@@ -31,5 +32,7 @@ def get_llm_client(provider: Optional[str] = None) -> LLMClient:
         return ChatGPTClient()
     elif provider_lower in ("gemini", "google"):
         return GeminiClient()
+    elif provider_lower in ("grok", "xai"):
+        return GrokClient()
     else:
-        raise ValueError(f"지원하지 않는 AI 공급자: {provider}. 지원되는 공급자: claude, chatgpt, gemini")
+        raise ValueError(f"지원하지 않는 AI 공급자: {provider}. 지원되는 공급자: claude, chatgpt, gemini, grok")

@@ -23,7 +23,9 @@ from modules.steps.step5_self_correcting import OfflineCorrector
 from modules.caldera.uploader import CalderaUploader
 from modules.caldera.executor import CalderaExecutor
 from modules.caldera.reporter import CalderaReporter
-from modules.core.config import get_caldera_url, get_caldera_api_key
+from modules.core.config import get_caldera_url, get_caldera_api_key, get_llm_provider
+from modules.core.metrics import init_metrics, get_metrics_tracker
+from modules.ai.factory import get_llm_client
 import yaml
 import time
 
@@ -225,6 +227,25 @@ def main():
     print(f"  - Version ID: {version_id}")
     print("="*70)
 
+    # 메트릭 추적 초기화
+    try:
+        llm_provider = get_llm_provider()
+        llm_client = get_llm_client()
+        llm_model = getattr(llm_client, 'model', '') or getattr(llm_client, 'model_name', '')
+    except:
+        llm_provider = "unknown"
+        llm_model = "unknown"
+
+    tracker = init_metrics(
+        experiment_id=version_id,
+        pdf_name=pdf_stem,
+        llm_provider=llm_provider,
+        llm_model=llm_model
+    )
+
+    print(f"\n[메트릭 추적] LLM Provider: {llm_provider}, Model: {llm_model}")
+    print("="*70)
+
     # Step 1: PDF Processing
     if 1 in steps:
         if not args.pdf:
@@ -234,9 +255,15 @@ def main():
         print("\n[Step 1] PDF Processing")
         print("-" * 70)
 
-        processor = PDFProcessor()
-        # version_id를 명시적으로 전달하여 동일 버전으로 연결
-        processor.process_pdf(args.pdf, output_path=str(step1_output), version_id=version_id)
+        tracker.start_step("Step 1: PDF Processing")
+        try:
+            processor = PDFProcessor()
+            # version_id를 명시적으로 전달하여 동일 버전으로 연결
+            processor.process_pdf(args.pdf, output_path=str(step1_output), version_id=version_id)
+            tracker.end_step(success=True)
+        except Exception as e:
+            tracker.end_step(success=False, error_message=str(e))
+            raise
 
     # Step 2: Abstract Flow Extraction
     if 2 in steps:
@@ -247,8 +274,14 @@ def main():
             print(f"[ERROR] {step1_output} 파일이 없습니다. Step 1을 먼저 실행하세요.")
             sys.exit(1)
 
-        extractor = AbstractFlowExtractor()
-        extractor.extract_abstract_flow(str(step1_output), str(step2_output), version_id=version_id)
+        tracker.start_step("Step 2: Abstract Flow Extraction")
+        try:
+            extractor = AbstractFlowExtractor()
+            extractor.extract_abstract_flow(str(step1_output), str(step2_output), version_id=version_id)
+            tracker.end_step(success=True)
+        except Exception as e:
+            tracker.end_step(success=False, error_message=str(e))
+            raise
 
     # Step 3: Concrete Flow Generation with Technique Selection
     if 3 in steps:
@@ -268,8 +301,14 @@ def main():
             print(f"[ERROR] {args.env} 파일이 없습니다.")
             sys.exit(1)
 
-        generator = ConcreteFlowGenerator()
-        generator.generate_concrete_flow(str(step2_output), args.env, str(step3_output), version_id=version_id)
+        tracker.start_step("Step 3: Concrete Flow Generation")
+        try:
+            generator = ConcreteFlowGenerator()
+            generator.generate_concrete_flow(str(step2_output), args.env, str(step3_output), version_id=version_id)
+            tracker.end_step(success=True)
+        except Exception as e:
+            tracker.end_step(success=False, error_message=str(e))
+            raise
 
     # Step 4: Caldera Ability Generation
     if 4 in steps:
@@ -280,11 +319,19 @@ def main():
             print(f"[ERROR] {step3_output} 파일이 없습니다. Step 3을 먼저 실행하세요.")
             sys.exit(1)
 
-        generator = AbilityGenerator()
-        generator.generate_abilities(str(step3_output), str(caldera_output_dir))
+        tracker.start_step("Step 4: Caldera Ability Generation")
+        try:
+            generator = AbilityGenerator()
+            generator.generate_abilities(str(step3_output), str(caldera_output_dir))
+            tracker.end_step(success=True)
+        except Exception as e:
+            tracker.end_step(success=False, error_message=str(e))
+            raise
 
     # Step 5: Caldera Automation (Upload → Execute → Self-Correct)
     if 5 in steps:
+        tracker.start_step("Step 5: Caldera Automation")
+
         print("\n[Step 5] Caldera 자동화 (업로드 → 실행 → Self-Correcting)")
         print("-" * 70)
 
@@ -579,9 +626,33 @@ def main():
             print("\n[INFO] 수정된 Ability가 없어 재실행을 건너뜁니다.")
 
         print("\n[OK] Step 5 완료!")
+        tracker.end_step(success=True)
+
+    # 메트릭 최종화 및 저장
+    tracker.finalize(success=True)
+
+    # 메트릭 저장
+    metrics_file = base_dir / "experiment_metrics.json"
+    tracker.save(str(metrics_file))
+
+    # 메트릭 요약 출력
+    summary = tracker.get_summary()
 
     print("\n" + "="*70)
     print("[SUCCESS] 완료!")
+    print("="*70)
+
+    print("\n[실험 메트릭 요약]")
+    print("-" * 70)
+    print(f"총 실행 시간: {summary['duration_formatted']}")
+    print(f"LLM 제공자: {summary['llm_provider']}")
+    print(f"LLM 모델: {summary['llm_model']}")
+    print(f"총 입력 토큰: {summary['total_input_tokens']:,}")
+    print(f"총 출력 토큰: {summary['total_output_tokens']:,}")
+    print(f"총 토큰: {summary['total_tokens']:,}")
+    print(f"예상 비용: ${summary['total_cost_usd']:.4f}")
+    print(f"완료된 Step: {summary['steps_completed']}/{summary['steps_completed'] + summary['steps_failed']}")
+    print(f"\n메트릭 저장: {metrics_file}")
     print("="*70)
 
 
@@ -590,9 +661,25 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("\n\n[INTERRUPTED] 사용자가 중단했습니다.")
+        # 메트릭 저장 시도
+        tracker = get_metrics_tracker()
+        if tracker:
+            try:
+                tracker.finalize(success=False)
+                print("\n[메트릭] 중단 시점까지의 메트릭을 저장합니다...")
+            except:
+                pass
         sys.exit(1)
     except Exception as e:
         print(f"\n\n[ERROR] 오류 발생: {e}")
         import traceback
         traceback.print_exc()
+        # 메트릭 저장 시도
+        tracker = get_metrics_tracker()
+        if tracker:
+            try:
+                tracker.finalize(success=False)
+                print("\n[메트릭] 실패 시점까지의 메트릭을 저장합니다...")
+            except:
+                pass
         sys.exit(1)

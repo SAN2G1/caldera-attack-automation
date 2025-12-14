@@ -1,0 +1,268 @@
+"""
+메트릭 추적 모듈
+LLM 사용량, 실행 시간, API 비용 등을 추적
+"""
+
+import json
+import time
+from dataclasses import dataclass, field, asdict
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
+from contextlib import contextmanager
+
+
+# ============================================================================
+# Data Models
+# ============================================================================
+
+@dataclass
+class LLMUsage:
+    """LLM API 호출당 사용량"""
+    model: str
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    cost: float = 0.0
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+
+
+@dataclass
+class StepMetrics:
+    """각 Step별 메트릭"""
+    step_name: str
+    start_time: str
+    end_time: Optional[str] = None
+    duration_seconds: float = 0.0
+    llm_calls: List[LLMUsage] = field(default_factory=list)
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_tokens: int = 0
+    total_cost: float = 0.0
+    status: str = "running"  # running, completed, failed
+    error_message: str = ""
+
+
+@dataclass
+class ExperimentMetrics:
+    """전체 실험 메트릭"""
+    experiment_id: str
+    pdf_name: str
+    start_time: str
+    end_time: Optional[str] = None
+    total_duration_seconds: float = 0.0
+    steps: List[StepMetrics] = field(default_factory=list)
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_tokens: int = 0
+    total_cost: float = 0.0
+    llm_provider: str = ""
+    llm_model: str = ""
+    status: str = "running"  # running, completed, failed
+
+
+# ============================================================================
+# Cost Calculator
+# ============================================================================
+
+class CostCalculator:
+    """LLM API 비용 계산"""
+
+    # 가격표 (USD per 1M tokens)
+    PRICING = {
+        # Claude
+        "claude-3-5-sonnet-20241022": {"input": 3.0, "output": 15.0},
+        "claude-3-5-sonnet-20240620": {"input": 3.0, "output": 15.0},
+        "claude-3-opus-20240229": {"input": 15.0, "output": 75.0},
+        "claude-3-sonnet-20240229": {"input": 3.0, "output": 15.0},
+        "claude-3-haiku-20240307": {"input": 0.25, "output": 1.25},
+
+        # ChatGPT/OpenAI
+        "gpt-4-turbo": {"input": 10.0, "output": 30.0},
+        "gpt-4": {"input": 30.0, "output": 60.0},
+        "gpt-4o": {"input": 5.0, "output": 15.0},
+        "gpt-4o-mini": {"input": 0.150, "output": 0.600},
+        "gpt-3.5-turbo": {"input": 0.5, "output": 1.5},
+
+        # Gemini
+        "gemini-1.5-pro": {"input": 1.25, "output": 5.0},
+        "gemini-1.5-flash": {"input": 0.075, "output": 0.30},
+        "gemini-1.0-pro": {"input": 0.5, "output": 1.5},
+
+        # Grok
+        "grok-beta": {"input": 5.0, "output": 15.0},
+    }
+
+    @classmethod
+    def calculate_cost(cls, model: str, input_tokens: int, output_tokens: int) -> float:
+        """비용 계산 (USD)"""
+        pricing = cls.PRICING.get(model)
+
+        if not pricing:
+            # 알 수 없는 모델은 기본값 사용 (GPT-4 기준)
+            pricing = {"input": 10.0, "output": 30.0}
+
+        input_cost = (input_tokens / 1_000_000) * pricing["input"]
+        output_cost = (output_tokens / 1_000_000) * pricing["output"]
+
+        return input_cost + output_cost
+
+
+# ============================================================================
+# Metrics Tracker
+# ============================================================================
+
+class MetricsTracker:
+    """메트릭 추적 및 관리"""
+
+    def __init__(self, experiment_id: str, pdf_name: str, llm_provider: str = "", llm_model: str = ""):
+        self.experiment = ExperimentMetrics(
+            experiment_id=experiment_id,
+            pdf_name=pdf_name,
+            start_time=datetime.now().isoformat(),
+            llm_provider=llm_provider,
+            llm_model=llm_model
+        )
+        self._start_time = time.time()
+        self._current_step: Optional[StepMetrics] = None
+        self._step_start_time: Optional[float] = None
+
+    @contextmanager
+    def track_step(self, step_name: str):
+        """Step 실행 시간 추적 context manager"""
+        self.start_step(step_name)
+        try:
+            yield
+            self.end_step(success=True)
+        except Exception as e:
+            self.end_step(success=False, error_message=str(e))
+            raise
+
+    def start_step(self, step_name: str):
+        """Step 시작"""
+        if self._current_step is not None:
+            # 이전 step이 종료되지 않았으면 강제 종료
+            self.end_step(success=False, error_message="Step interrupted by new step")
+
+        self._current_step = StepMetrics(
+            step_name=step_name,
+            start_time=datetime.now().isoformat()
+        )
+        self._step_start_time = time.time()
+
+    def end_step(self, success: bool = True, error_message: str = ""):
+        """Step 종료"""
+        if self._current_step is None:
+            return
+
+        self._current_step.end_time = datetime.now().isoformat()
+        self._current_step.duration_seconds = time.time() - self._step_start_time
+        self._current_step.status = "completed" if success else "failed"
+        self._current_step.error_message = error_message
+
+        # Step의 총 토큰 및 비용 계산
+        for usage in self._current_step.llm_calls:
+            self._current_step.total_input_tokens += usage.input_tokens
+            self._current_step.total_output_tokens += usage.output_tokens
+            self._current_step.total_tokens += usage.total_tokens
+            self._current_step.total_cost += usage.cost
+
+        self.experiment.steps.append(self._current_step)
+        self._current_step = None
+        self._step_start_time = None
+
+    def record_llm_call(self, model: str, input_tokens: int, output_tokens: int):
+        """LLM API 호출 기록"""
+        total_tokens = input_tokens + output_tokens
+        cost = CostCalculator.calculate_cost(model, input_tokens, output_tokens)
+
+        usage = LLMUsage(
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            cost=cost
+        )
+
+        if self._current_step is not None:
+            self._current_step.llm_calls.append(usage)
+
+        # 전체 실험 메트릭 업데이트
+        self.experiment.total_input_tokens += input_tokens
+        self.experiment.total_output_tokens += output_tokens
+        self.experiment.total_tokens += total_tokens
+        self.experiment.total_cost += cost
+
+    def finalize(self, success: bool = True):
+        """실험 종료 및 최종 메트릭 계산"""
+        # 현재 Step이 아직 종료되지 않았으면 종료
+        if self._current_step is not None:
+            self.end_step(success=success)
+
+        self.experiment.end_time = datetime.now().isoformat()
+        self.experiment.total_duration_seconds = time.time() - self._start_time
+        self.experiment.status = "completed" if success else "failed"
+
+    def save(self, output_path: str):
+        """메트릭을 JSON 파일로 저장"""
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(asdict(self.experiment), f, indent=2, ensure_ascii=False)
+
+    def get_summary(self) -> Dict:
+        """메트릭 요약 반환"""
+        return {
+            "experiment_id": self.experiment.experiment_id,
+            "pdf_name": self.experiment.pdf_name,
+            "duration_seconds": self.experiment.total_duration_seconds,
+            "duration_formatted": self._format_duration(self.experiment.total_duration_seconds),
+            "llm_provider": self.experiment.llm_provider,
+            "llm_model": self.experiment.llm_model,
+            "total_input_tokens": self.experiment.total_input_tokens,
+            "total_output_tokens": self.experiment.total_output_tokens,
+            "total_tokens": self.experiment.total_tokens,
+            "total_cost_usd": round(self.experiment.total_cost, 4),
+            "steps_completed": len([s for s in self.experiment.steps if s.status == "completed"]),
+            "steps_failed": len([s for s in self.experiment.steps if s.status == "failed"]),
+            "status": self.experiment.status
+        }
+
+    @staticmethod
+    def _format_duration(seconds: float) -> str:
+        """초를 사람이 읽기 쉬운 형식으로 변환"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+
+        if hours > 0:
+            return f"{hours}h {minutes}m {secs}s"
+        elif minutes > 0:
+            return f"{minutes}m {secs}s"
+        else:
+            return f"{secs}s"
+
+
+# ============================================================================
+# Global Metrics Instance
+# ============================================================================
+
+_global_tracker: Optional[MetricsTracker] = None
+
+
+def init_metrics(experiment_id: str, pdf_name: str, llm_provider: str = "", llm_model: str = "") -> MetricsTracker:
+    """전역 메트릭 추적 초기화"""
+    global _global_tracker
+    _global_tracker = MetricsTracker(experiment_id, pdf_name, llm_provider, llm_model)
+    return _global_tracker
+
+
+def get_metrics_tracker() -> Optional[MetricsTracker]:
+    """전역 메트릭 추적 인스턴스 반환"""
+    return _global_tracker
+
+
+def reset_metrics():
+    """전역 메트릭 추적 리셋"""
+    global _global_tracker
+    _global_tracker = None
