@@ -179,10 +179,9 @@ class VBoxController:
             self.restore_and_start(vm_name_lateral, snapshot_name_lateral)
             print(f"  [OK] {vm_name_lateral} 재부팅 완료")
 
-        # VM 부팅 대기
-        print("  VM 부팅 대기 중 (30초)...")
-        time.sleep(30)
-        print("  [OK] 모든 VM 재부팅 완료")
+        # [최적화] 고정된 30초 대기 제거
+        # VM 부팅 완료는 agent_manager.wait_for_agents()에서 동적으로 확인
+        print("  [OK] 모든 VM 재부팅 시작 완료 (에이전트 대기로 부팅 완료 확인)")
 
         # 콜백 함수 실행 (예: Caldera agent 대기)
         if wait_callback:
