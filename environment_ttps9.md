@@ -28,10 +28,12 @@
       - 목록
         - sandcat_ttps9.ps1
           - Caldera agent 실행파일
+        - Keylogger.ps1
+          - 정보 수집을 위한 키로거 스크립트 (C:\Users\Public\data\keylog.txt에 저장)
         - screen_capture.ps1
-          - 정보 수집을 위한 화면 캡처 스크립트
+          - 정보 수집을 위한 화면 캡처 스크립트 (C:\Users\Public\data\screenshot_*.png에 저장)
         - collect_mobile_data.ps1
-          - 모바일 장치 데이터 수집 스크립트
+          - 모바일 장치 데이터 수집 스크립트 (C:\Users\Public\data\mobile_collected에 저장)
 
     - POST /upload
       - 피해자 PC에서 수집한 데이터를 HTTP POST 요청을 통해 공격자 서버로 유출하기 위한 엔드포인트
