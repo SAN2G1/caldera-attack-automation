@@ -58,6 +58,9 @@
     - VSS 스냅샷 생성됨
         - Volume: C:\
 
+- 유출 대상 파일 위치
+    - C:\Users\Public\data\*
+    
 - 랜섬웨어 영향 대상
     - 랜섬노트 생성 위치: C:\Users\Public\data\
 
@@ -102,41 +105,5 @@
   - 레지스트리 설정 후 fodhelper.exe 실행 시 자동으로 elevated 권한으로 sandcat_ttps8.ps1이 실행됨
   - 새로운 elevated agent가 자동으로 Caldera 서버에 연결됨
 - 이후 실행되는 ability들은 새로 연결된 elevated agent에서 관리자 권한으로 동작
-
----
-
-## 측면 이동
-
-### 1단계: Domain Controller 침투
-- ttps8 (192.168.56.150) → ttps8_ad (192.168.56.151)
-  - 하나의 명령으로: New-PSDrive로 credential 연결, Copy-Item으로 파일 복사, Remove-PSDrive로 정리
-  - 대상 경로: C:\Users\Public\data\sandcat_ttps8.ps1
-  - VICTIMCORP\Administrator credential 사용
-
-- WinRM으로 DC에서 Agent 백그라운드 실행
-  - VICTIMCORP\Administrator 권한으로 실행
-
-- DC Agent 연결 대기
-  - 반복문으로 Caldera API (GET /api/v2/agents) 호출
-  - 192.168.56.151 IP의 Agent가 등록될 때까지 반복
-  - 각 시도마다 10초 대기, 최대 60초 타임아웃
-
-### 2단계: Domain Client 침투 (DC Agent에서 실행)
-- ttps8_ad (192.168.56.151) → ttps8_2 (192.168.56.152)
-  - 하나의 명령으로: New-PSDrive로 credential 연결, Copy-Item으로 파일 복사, Remove-PSDrive로 정리
-  - 대상 경로: C:\Users\Public\data\sandcat_ttps8.ps1
-  - VICTIMCORP\Administrator credential 사용
-
-- WinRM으로 Client에서 Agent 백그라운드 실행
-  - VICTIMCORP\Administrator 권한으로 실행
-
-- Client Agent 연결 대기
-  - 반복문으로 Caldera API (GET /api/v2/agents) 호출
-  - 192.168.56.152 IP의 Agent가 등록될 때까지 반복
-  - 각 시도마다 10초 대기, 최대 60초 타임아웃
-
-### 3단계: 각 시스템에서 공격 수행
-- 각 시스템의 Agent가 로컬에서 직접 공격 수행
-  - Caldera는 ability의 target IP를 보고 해당 Agent에 자동 할당
 
 ---
