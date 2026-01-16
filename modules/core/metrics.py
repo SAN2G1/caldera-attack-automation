@@ -70,7 +70,12 @@ class CostCalculator:
 
     # 가격표 (USD per 1M tokens)
     PRICING = {
-        # Claude
+        # Claude (Latest 2025)
+        "claude-opus-4-5-20251101": {"input": 5.0, "output": 25.0},
+        "claude-sonnet-4-5-20250929": {"input": 3.0, "output": 15.0},
+        "claude-opus-4-20250514": {"input": 15.0, "output": 75.0},
+        "claude-sonnet-4-20250514": {"input": 3.0, "output": 15.0},
+        # Claude (Legacy)
         "claude-3-5-sonnet-20241022": {"input": 3.0, "output": 15.0},
         "claude-3-5-sonnet-20240620": {"input": 3.0, "output": 15.0},
         "claude-3-opus-20240229": {"input": 15.0, "output": 75.0},
@@ -80,17 +85,28 @@ class CostCalculator:
         # ChatGPT/OpenAI
         "gpt-4-turbo": {"input": 10.0, "output": 30.0},
         "gpt-4": {"input": 30.0, "output": 60.0},
-        "gpt-4o": {"input": 5.0, "output": 15.0},
+        "gpt-4o": {"input": 2.5, "output": 10.0},
         "gpt-4o-mini": {"input": 0.150, "output": 0.600},
         "gpt-3.5-turbo": {"input": 0.5, "output": 1.5},
 
-        # Gemini
+        # Gemini (Latest 2025)
+        "gemini-2.5-pro": {"input": 1.25, "output": 10.0},
+        "gemini-2.5-flash": {"input": 0.15, "output": 0.60},
+        "gemini-2.0-flash": {"input": 0.10, "output": 0.40},
+        # Gemini (Legacy)
         "gemini-1.5-pro": {"input": 1.25, "output": 5.0},
         "gemini-1.5-flash": {"input": 0.075, "output": 0.30},
         "gemini-1.0-pro": {"input": 0.5, "output": 1.5},
 
-        # Grok
+        # Grok (Latest 2025)
+        "grok-4": {"input": 3.0, "output": 15.0},
+        "grok-4-fast-reasoning": {"input": 0.20, "output": 0.50},
+        "grok-4-fast-non-reasoning": {"input": 0.20, "output": 0.50},
+        "grok-4-1-fast-reasoning": {"input": 0.20, "output": 0.50},
+        "grok-4-1-fast-non-reasoning": {"input": 0.20, "output": 0.50},
+        # Grok (Legacy)
         "grok-beta": {"input": 5.0, "output": 15.0},
+        "grok-2-1212": {"input": 2.0, "output": 10.0},
     }
 
     @classmethod
