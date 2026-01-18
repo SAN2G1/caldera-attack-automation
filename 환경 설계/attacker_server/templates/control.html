@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Attack Control Panel</title>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 40px;
+            background: #f5f5f5;
+        }
+
+        .panel {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin: 10px 0;
+            background: white;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        input {
+            padding: 8px;
+            width: 300px;
+        }
+
+        .file-list {
+            margin-top: 20px;
+        }
+
+        .file-item {
+            background: #f9f9f9;
+            padding: 10px;
+            margin: 5px 0;
+            border-left: 3px solid #007bff;
+            cursor: pointer;
+        }
+
+        .file-item:hover {
+            background: #f0f0f0;
+        }
+
+        a {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .log-container {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Attack Control Panel</h1>
+
+    <div class="panel">
+        <h2>Agent Files</h2>
+        <p>Available agents</p>
+        <div id="agentList" class="file-list">Loading...</div>
+    </div>
+
+    <div class="panel">
+        <h2>TTPs2 - Spear Phishing</h2>
+        <p>Target IP: 192.168.56.120</p>
+        <button onclick="downloadFile('/agents/sandcat_ttps2.ps1', 'sandcat_ttps2.ps1')">Download TTPS2 Agent</button>
+    </div>
+
+    <div class="panel">
+        <h2>TTPs6 - Watering Hole</h2>
+        <p>Target IP: 192.168.56.145</p>
+        <button onclick="window.open('/notice')">Open Notice Page</button>
+    </div>
+
+    <div class="panel">
+        <h2>TTPs10 - Watering Hole LNK</h2>
+        <p>Target IP: 192.168.56.180</p>
+        <button onclick="downloadFile('/download/malicious.lnk', 'pic.png.lnk')">Download LNK</button>
+        <button onclick="window.open('/news/article/1')">Open News Article</button>
+    </div>
+
+    <div class="panel">
+        <h2>Upload Test</h2>
+        <form action="/upload" method="POST" enctype="multipart/form-data">
+            <input type="text" name="agent_id" placeholder="Agent ID" value="test">
+            <input type="file" name="file">
+            <button type="submit">Upload</button>
+        </form>
+    </div>
+
+    <div class="panel">
+        <h2>Access Logs</h2>
+        <button onclick="loadLogs()">Refresh Logs</button>
+        <div id="logContainer" class="log-container" style="display:none;"></div>
+    </div>
+
+    <script>
+        function loadAgents() {
+            fetch('/api/agents')
+                .then(r => r.json())
+                .then(data => {
+                    let html = '';
+                    data.agents.forEach(f => {
+                        html += `<div class="file-item" onclick="downloadFile('/agents/${f}', '${f}')">
+                            [FILE] ${f} <span style="float:right; color:#999;">Click to download</span>
+                        </div>`;
+                    });
+                    document.getElementById('agentList').innerHTML = html;
+                });
+        }
+
+        function downloadFile(url, filename) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        function loadLogs() {
+            fetch('/api/logs')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('logContainer').innerHTML = data.logs.join('<br>');
+                    document.getElementById('logContainer').style.display = 'block';
+                });
+        }
+
+        loadAgents();
+    </script>
+</body>
+
+</html>
