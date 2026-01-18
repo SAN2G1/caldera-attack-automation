@@ -167,7 +167,7 @@ class AbilityGenerator:
             "name": "psh",  # PowerShell 고정
             "platform": "windows",
             "command": command,
-            "timeout": 120 if "privilege" in node_type else 20,
+            "timeout": 60,
             "payloads": payloads,
             "uploads": uploads,
             "cleanup": []  # 디버깅을 위해 비워둠
