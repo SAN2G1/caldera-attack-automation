@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Central Management Console</title>
+</head>
+
+<body>
+    <h1>Central Management Console</h1>
+    <hr>
+
+    <h2>Vulnerabilities</h2>
+    <ul>
+        <li><strong>VULN 1:</strong> /uploads - No file extension validation</li>
+        <li><strong>VULN 2:</strong> /api/createuser - No authentication (GET: ?user=X&pass=Y)</li>
+    </ul>
+    <hr>
+
+    <h2>Upload File</h2>
+    <form action="/uploads" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <button type="submit">Upload</button>
+    </form>
+    <hr>
+
+    <h2>Uploaded Files</h2>
+    <ul>{{UPLOADED_FILES}}</ul>
+    <hr>
+
+    <h2>Deploy to Clients</h2>
+    <form id="deployForm">
+        <select id="deploySelect" required>
+            <option value="">Select file...</option>
+            {{FILE_OPTIONS}}
+        </select>
+        <button type="submit">Deploy</button>
+    </form>
+    <hr>
+
+    <h2>Deployed Files</h2>
+    <ul>{{DEPLOYED_FILES}}</ul>
+
+    <script>
+        document.getElementById('deployForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const file = document.getElementById('deploySelect').value;
+            if (!file) return;
+
+            fetch('/api/deploy/' + encodeURIComponent(file))
+                .then(response => response.text())
+                .then(data => {
+                    alert('Deployment result:\n' + data);
+                    location.reload();
+                });
+        });
+    </script>
+</body>
+
+</html>

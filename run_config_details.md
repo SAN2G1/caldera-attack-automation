@@ -193,3 +193,22 @@ python main.py --step all --pdf "data/raw/KISA_TTPs_10.pdf" --env "environment_t
 ```
 
 ---
+
+## TTPs 11
+
+### .env 수정 사항
+```env
+VBOX_VM_NAME=ttps11
+VBOX_SNAPSHOT_NAME=ttps11
+VBOX_VM_NAME_lateral=ttps11_2
+VBOX_SNAPSHOT_NAME_lateral=ttps11_2
+# VBOX_VM_NAME_ad=
+# VBOX_SNAPSHOT_NAME_ad=
+```
+
+### 전체 파이프라인 실행 명령어
+```bash
+python main.py --step all --pdf "data/raw/KISA_TTPs_11.pdf" --env "environment_ttps11.md"
+```
+
+---
