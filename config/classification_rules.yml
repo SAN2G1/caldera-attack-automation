@@ -1,87 +1,99 @@
-# M7 Self-Correcting - Failure Classification Rules
-# 실패 유형별 키워드 및 패턴 정의
+# Self-Correcting - Failure Classification Rules
+# Priority order: syntax_error > timeout > dependency_error > missing_env > unrecoverable
+# All patterns are case-insensitive regex
 
 syntax_error:
-  description: "명령어 문법 오류"
-  keywords:
-    - "syntax error"
+  description: |
+    SYNTAX ERROR - Command Syntax Error
+    The command syntax is invalid and cannot be parsed or executed.
+    This includes incorrect parameter formats, missing arguments,
+    incompatible command usage, and string/path format errors.
+  patterns:
+    # PowerShell parser errors
+    - "parsererror"
     - "unexpected token"
-    - "parse error"
-    - "ParserError"
-    - "TerminatorError"
-    - "UnexpectedToken"
-    - "InvalidOperationException"
-    - "cannot parse"
-
-  patterns:
-    - "line \\d+:"
     - "At line:\\d+"
-    - "position \\d+"
-    - "char:\\d+"
+    - "is not a valid statement separator"
+    # Parameter errors
+    - "invalid\\s+(key\\s+name|parameter)"
+    - "positional parameter"
+    - "cannot be found that accepts"
+    # Format errors
+    - "second path fragment must not be"
+    - "cannot be more than"
+    - "incorrectly formatted"
+    - "cannot overwrite the item.+with itself"
+    # CMD/PowerShell compatibility
+    - "is not recognized as the name of a cmdlet"
+    # bcdedit/system command errors
+    - "command specified is not valid"
+    - "service name is invalid"
 
-missing_env:
-  description: "환경 정보 누락 (IP, URL, 경로 등)"
-  keywords:
-    - "cannot find path"
-    - "invalid URI"
-    - "connection refused"
-    - "host not found"
-    - "no such file"
-    - "not found"
-    - "does not exist"
-    - "target machine actively refused"
-    - "unable to connect"
-    - "network path was not found"
-
-  extractors:
-    ip_address: "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"
-    file_path: "[A-Z]:\\\\[\\w\\\\.\\s-]+"
-    url: "https?://[\\w\\.\\-:]+"
-    placeholder: "[A-Z_]+_[A-Z_]+"  # TARGET_IP, WEB_URL 등
-
-caldera_constraint:
-  description: "Caldera 제약사항 (변수 공유 불가 등)"
-  keywords:
-    - "variable is not defined"
-    - "undefined variable"
-    - "cannot find variable"
-    - "variable '$"
-    - "The term '$"
-    - "not recognized as the name"
-
+timeout:
+  description: |
+    TIMEOUT - Execution Time Exceeded
+    The command execution did not complete within the specified time limit.
+    This includes long-running operations, timeout while waiting for response,
+    and service response delays.
   patterns:
-    - "\\$\\w+"  # PowerShell 변수
-    - "#{\\w+}"  # Caldera 변수
+    - "timeout\\s*reached"
+    - "process\\s*(was\\s*)?killed"
+    - "did not respond.+in a timely fashion"
+  exit_codes:
+    - 124
 
 dependency_error:
-  description: "권한 부족 또는 선행 조건 미충족"
-  keywords:
-    - "access denied"
-    - "access is denied"
-    - "requires elevation"
-    - "privilege"
-    - "unauthorized"
-    - "permission denied"
-    - "not authorized"
-    - "run as administrator"
-    - "SeDebugPrivilege"
-
+  description: |
+    DEPENDENCY ERROR - Dependency/Permission Issues
+    The prerequisites required for command execution are not met.
+    This includes insufficient permissions, cascading failures due to prior task failures,
+    authentication failures, remote connection configuration issues, and service access denials.
   patterns:
-    - "error code: 5"  # Access Denied
-    - "0x[0-9A-Fa-f]+"  # Windows 에러 코드
+    # Permission related
+    - "access\\s*(is\\s*)?denied"
+    - "requires?\\s+elevation"
+    - "privilege"
+    - "unauthori[sz]ed"
+    - "run\\s+as\\s+administrator"
+    - "user credentials cannot be used for local"
+    - "user credentials are not allowed"
+    - "account restrictions"
+    - "accessviolationexception"
+    # Service related
+    - "(open|start|create)service\\s+failed"
+    - "service does not exist"
+    - "service cannot be started"
+    - "initialization failure"
+    # WinRM/Remote related
+    - "winrm\\s+client\\s+cannot\\s+process"
+    - "connecting to remote server.+failed"
+    - "psremoting"
+    - "trustedhosts"
+
+missing_env:
+  description: |
+    MISSING ENVIRONMENT - Environment/Resource Absence
+    The file, path, network resource, or service referenced by the command does not exist
+    in the current environment. This includes incorrect IP/URL, non-existent file paths,
+    and network connection failures.
+  patterns:
+    # Path/file not found
+    - "cannot find (path|drive)"
+    - "could not find (a part of )?the path"
+    - "does not exist"
+    - "cannot find type"
+    - "no file received"
+    - "network name cannot be found"
+    # Network related
+    - "unable to connect"
+    - "network\\s+connection\\s+could\\s+not\\s+be\\s+found"
+    # Windows system errors
+    - "system error\\s+(53|67|86|1355|6118)"
 
 unrecoverable:
-  description: "복구 불가능한 오류"
-  keywords:
-    - "not recognized as cmdlet"
-    - "not recognized as the name"
-    - "command not found"
-    - "is not installed"
-    - "module could not be loaded"
-    - "cannot load assembly"
-    - "fatal error"
-    - "critical error"
-
-  patterns:
-    - "0xC0000005"  # Access Violation
-    - "segmentation fault"
+  description: |
+    UNRECOVERABLE - Cannot be Fixed
+    Does not fall into the above categories, or there is insufficient error information
+    to determine the cause. This includes cases with no output and other errors
+    that do not match classification criteria.
+  patterns: []

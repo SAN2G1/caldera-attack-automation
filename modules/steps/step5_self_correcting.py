@@ -30,8 +30,8 @@ class FailureType(Enum):
     """실패 유형"""
     SYNTAX_ERROR = "syntax_error"
     MISSING_ENV = "missing_env"
-    CALDERA_CONSTRAINT = "caldera_constraint"
     DEPENDENCY_ERROR = "dependency_error"
+    TIMEOUT = "timeout"
     UNRECOVERABLE = "unrecoverable"
 
 
@@ -66,23 +66,85 @@ class CorrectionResult:
 # Failure Classifier
 # ============================================================================
 
+# 설정 파일 경로
+CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
+CLASSIFICATION_RULES_PATH = CONFIG_DIR / "classification_rules.yml"
+
+
 class FailureClassifier:
-    """실패 유형 분류"""
+    """실패 유형 분류 (config/classification_rules.yml 기반)"""
 
-    RULES = {
-        "syntax_error": ["syntax error", "parsererror", "parse error", "unexpected token"],
-        "missing_env": ["cannot find path", "connection refused", "not found", "invalid uri"],
-        "caldera_constraint": ["variable is not defined", "undefined variable", "cannot find variable"],
-        "dependency_error": ["access is denied", "access denied", "requires elevation", "privilege", "unauthorized"],
-        "unrecoverable": ["not recognized as cmdlet", "command not found", "is not installed"]
-    }
+    PRIORITY_ORDER = ["syntax_error", "timeout", "dependency_error", "missing_env", "unrecoverable"]
 
-    def classify(self, stderr: str, stdout: str) -> FailureType:
-        """실패 유형 분류"""
+    def __init__(self):
+        self.rules = self._load_rules()
+        self.descriptions = self._load_descriptions()
+
+    def _load_rules(self) -> Dict[str, list]:
+        """분류 규칙 로드 및 정규표현식 컴파일"""
+        try:
+            with open(CLASSIFICATION_RULES_PATH, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+
+            rules = {}
+            for error_type in self.PRIORITY_ORDER:
+                if error_type in config and 'patterns' in config[error_type]:
+                    patterns = config[error_type]['patterns']
+                    # 정규표현식 패턴 컴파일 (case-insensitive)
+                    compiled = []
+                    for p in patterns:
+                        try:
+                            compiled.append(re.compile(p, re.IGNORECASE))
+                        except re.error as e:
+                            print(f"[WARN] Invalid regex pattern '{p}': {e}")
+                    rules[error_type] = compiled
+
+            return rules
+        except Exception as e:
+            print(f"[WARN] Failed to load classification rules: {e}")
+            return {}
+
+    def _load_descriptions(self) -> Dict[str, str]:
+        """실패 유형 설명 로드"""
+        try:
+            with open(CLASSIFICATION_RULES_PATH, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+
+            descriptions = {}
+            for error_type in self.PRIORITY_ORDER:
+                if error_type in config and 'description' in config[error_type]:
+                    descriptions[error_type] = config[error_type]['description']
+
+            return descriptions
+        except Exception:
+            return {}
+
+    def get_description(self, failure_type: FailureType) -> str:
+        """실패 유형의 설명 반환"""
+        return self.descriptions.get(failure_type.value, "")
+
+    def classify(self, stderr: str, stdout: str, exit_code: int = -1) -> FailureType:
+        """
+        실패 유형 분류 (우선순위 기반)
+
+        Args:
+            stderr: 표준 에러 출력
+            stdout: 표준 출력
+            exit_code: 종료 코드 (timeout 감지용)
+        """
         error_text = (stderr + "\n" + stdout).lower()
 
-        for rule_key, keywords in self.RULES.items():
-            if any(keyword in error_text for keyword in keywords):
+        # exit_code 124 = timeout
+        if exit_code == 124:
+            return FailureType.TIMEOUT
+
+        # 우선순위 순서대로 분류
+        for rule_key in self.PRIORITY_ORDER:
+            if rule_key == "unrecoverable":
+                continue  # unrecoverable은 기본값으로 처리
+
+            patterns = self.rules.get(rule_key, [])
+            if any(pattern.search(error_text) for pattern in patterns):
                 return FailureType(rule_key)
 
         return FailureType.UNRECOVERABLE
@@ -95,43 +157,10 @@ class FailureClassifier:
 class AbilityFixer:
     """LLM 기반 Ability 수정"""
 
-    FIX_STRATEGIES = {
-        FailureType.SYNTAX_ERROR: """
-[Fix Strategy: SYNTAX_ERROR]
-- PowerShell 5.1 문법 확인
-- 변수 선언 검증
-- 특수문자 이스케이프
-- 따옴표 사용 수정
-""",
-        FailureType.MISSING_ENV: """
-[Fix Strategy: MISSING_ENV]
-- 환경 설명의 실제 값으로 플레이스홀더 교체
-- IP, URL, 자격증명을 환경 설명 기준으로 수정
-- 경로 존재 여부 확인
-""",
-        FailureType.CALDERA_CONSTRAINT: """
-[Fix Strategy: CALDERA_CONSTRAINT]
-- 이전 Ability 변수 의존성 제거
-- 명령어를 완전히 자체 포함형으로 수정
-- 값을 하드코딩하거나 재계산
-""",
-        FailureType.DEPENDENCY_ERROR: """
-[Fix Strategy: DEPENDENCY_ERROR]
-- 권한 상승 필요 여부 확인
-- 권한 문제 에러 핸들링 추가
-- 높은 권한이 필요없는 대체 방법 사용
-""",
-        FailureType.UNRECOVERABLE: """
-[Fix Strategy: UNRECOVERABLE]
-- Windows/PowerShell 기본 cmdlet만 사용
-- 외부 도구 의존 제거
-- 네이티브 대안으로 교체
-"""
-    }
-
-    def __init__(self):
+    def __init__(self, classifier: FailureClassifier):
         self.llm = get_llm_client()
         self.prompt_manager = PromptManager()
+        self.classifier = classifier
 
     def fix_ability(
         self,
@@ -172,10 +201,10 @@ class AbilityFixer:
         """LLM 프롬프트 구성"""
 
         original_cmd = original_ability.get('executors', [{}])[0].get('command', '')
-        strategy = self.FIX_STRATEGIES.get(failed.failure_type, "")
+        failure_type_description = self.classifier.get_description(failed.failure_type)
 
-        stderr_preview = failed.stderr[:1000] if failed.stderr else "(없음)"
-        stdout_preview = failed.stdout[:1000] if failed.stdout else "(없음)"
+        stderr_preview = failed.stderr[:1000] if failed.stderr else "(none)"
+        stdout_preview = failed.stdout[:1000] if failed.stdout else "(none)"
 
         # correction_history 포맷팅
         history_text = ""
@@ -198,7 +227,7 @@ class AbilityFixer:
             stderr=stderr_preview,
             stdout=stdout_preview,
             failure_type=failed.failure_type.value,
-            strategy=strategy,
+            failure_type_description=failure_type_description,
             env_description=env_description,
             correction_history=history_text
         )
@@ -257,7 +286,7 @@ class OfflineCorrector:
 
     def __init__(self):
         self.classifier = FailureClassifier()
-        self.fixer = AbilityFixer()
+        self.fixer = AbilityFixer(self.classifier)
 
     def run(
         self,
@@ -295,27 +324,27 @@ class OfflineCorrector:
         with open(operation_report_file, 'r', encoding='utf-8') as f:
             operation_report = json.load(f)
 
-        print(f"\n[로드 완료] {len(abilities)} abilities")
+        print(f"\n[LOADED] {len(abilities)} abilities")
 
         # Operation 이름 추출 (새 양식: operation_metadata.name)
         op_name = operation_report.get('operation_metadata', {}).get('name', 'Unknown')
-        print(f"[로드 완료] Operation: {op_name}")
+        print(f"[LOADED] Operation: {op_name}")
 
         # 2. 실패한 Ability 추출
         failed_abilities = self._extract_failed_abilities(operation_report)
         stats = self._calculate_stats(operation_report)
 
-        print(f"[통계] 전체: {stats['total']}, 성공: {stats['success']}, 실패: {stats['failed']}")
+        print(f"[STATS] Total: {stats['total']}, Success: {stats['success']}, Failed: {stats['failed']}")
 
         if not failed_abilities:
-            print("\n[완료] 수정이 필요한 실패 ability가 없습니다!")
+            print("\n[DONE] No failed abilities to fix!")
             return {"corrections": [], "summary": {"total_failed": 0, "corrected": 0, "skipped": 0}}
 
         # 3. Ability 매핑 생성
         abilities_map = {a['ability_id']: a for a in abilities}
 
         # 4. 각 실패한 Ability 처리
-        print(f"\n[수정 단계] {len(failed_abilities)}개 실패 처리")
+        print(f"\n[FIXING] Processing {len(failed_abilities)} failed abilities")
 
         correction_results = []
         modified_ids = set()
@@ -326,17 +355,17 @@ class OfflineCorrector:
             # 이전 수정 이력 확인
             history = correction_history.get(failed.ability_id, [])
             if history:
-                print(f"    [이력] 이전 수정 시도 {len(history)}회")
+                print(f"    [HISTORY] {len(history)} previous attempts")
                 for h in history:
-                    print(f"      - 시도 {h.get('attempt', 'N/A')}: {h.get('failure_type', 'Unknown')}")
+                    print(f"      - Attempt {h.get('attempt', 'N/A')}: {h.get('failure_type', 'Unknown')}")
 
             # 4-1. 실패 유형 분류
-            failed.failure_type = self.classifier.classify(failed.stderr, failed.stdout)
-            print(f"    실패 유형: {failed.failure_type.value}")
+            failed.failure_type = self.classifier.classify(failed.stderr, failed.stdout, failed.exit_code)
+            print(f"    Failure type: {failed.failure_type.value}")
 
             # 4-2. UNRECOVERABLE이면 스킵
             if failed.failure_type == FailureType.UNRECOVERABLE:
-                print(f"    [스킵] 복구 불가능한 에러")
+                print(f"    [SKIP] Unrecoverable error")
                 correction_results.append(CorrectionResult(
                     ability_id=failed.ability_id,
                     ability_name=failed.ability_name,
@@ -344,25 +373,57 @@ class OfflineCorrector:
                     fixed_command="",
                     failure_type=failed.failure_type,
                     success=False,
-                    reason="복구 불가능한 에러 유형"
+                    reason="Unrecoverable error type"
                 ))
                 continue
 
             # 4-3. 원본 Ability 조회
             original = abilities_map.get(failed.ability_id)
             if not original:
-                print(f"    [경고] 원본 ability를 찾을 수 없음")
+                print(f"    [WARN] Original ability not found")
                 continue
 
-            # 4-4. LLM으로 수정 (이력 정보 전달)
-            print(f"    LLM 수정 중...")
+            # 4-4. TIMEOUT이면 timeout 값만 증가 (LLM 호출 불필요)
+            if failed.failure_type == FailureType.TIMEOUT:
+                current_timeout = original['executors'][0].get('timeout', 60)
+                new_timeout = min(current_timeout + 60, 120)  # 최대 120초
+
+                if new_timeout > current_timeout:
+                    original['executors'][0]['timeout'] = new_timeout
+                    modified_ids.add(failed.ability_id)
+                    print(f"    [TIMEOUT] Increased timeout: {current_timeout}s -> {new_timeout}s")
+
+                    correction_results.append(CorrectionResult(
+                        ability_id=failed.ability_id,
+                        ability_name=failed.ability_name,
+                        original_command=failed.command,
+                        fixed_command=failed.command,  # 명령어는 변경 없음
+                        failure_type=failed.failure_type,
+                        success=True,
+                        reason=f"Timeout increased from {current_timeout}s to {new_timeout}s"
+                    ))
+                else:
+                    print(f"    [SKIP] Already at max timeout ({current_timeout}s)")
+                    correction_results.append(CorrectionResult(
+                        ability_id=failed.ability_id,
+                        ability_name=failed.ability_name,
+                        original_command=failed.command,
+                        fixed_command="",
+                        failure_type=failed.failure_type,
+                        success=False,
+                        reason=f"Already at max timeout ({current_timeout}s)"
+                    ))
+                continue
+
+            # 4-5. LLM으로 수정 (이력 정보 전달)
+            print(f"    Fixing with LLM...")
             fixed_cmd, success = self.fixer.fix_ability(failed, original, env_description, history)
 
             if success and fixed_cmd:
                 # abilities 리스트에서 해당 ability의 command 직접 수정
                 original['executors'][0]['command'] = fixed_cmd
                 modified_ids.add(failed.ability_id)
-                print(f"    [완료] {fixed_cmd[:60]}...")
+                print(f"    [FIXED] {fixed_cmd[:60]}...")
 
                 correction_results.append(CorrectionResult(
                     ability_id=failed.ability_id,
@@ -380,7 +441,7 @@ class OfflineCorrector:
                     fixed_command="",
                     failure_type=failed.failure_type,
                     success=False,
-                    reason="LLM 수정 실패"
+                    reason="LLM fix failed"
                 ))
 
         # 5. 수정된 abilities.yml 저장
@@ -396,7 +457,7 @@ class OfflineCorrector:
         with open(abilities_output, 'w', encoding='utf-8') as f:
             yaml.dump(abilities, f, allow_unicode=True, sort_keys=False)
 
-        print(f"\n[저장] abilities.yml: {abilities_output}")
+        print(f"\n[SAVED] abilities.yml: {abilities_output}")
 
         # 6. 수정 리포트 생성 및 저장
         report = self._generate_report(operation_report, stats, correction_results)
@@ -405,16 +466,15 @@ class OfflineCorrector:
         with open(report_output, 'w', encoding='utf-8') as f:
             json.dump(report, f, indent=2, ensure_ascii=False)
 
-        print(f"[저장] correction_report.json: {report_output}")
+        print(f"[SAVED] correction_report.json: {report_output}")
 
         # 7. 결과 요약
         corrected = len([r for r in correction_results if r.success])
-        skipped = len([r for r in correction_results if not r.success])
 
         print("\n" + "=" * 70)
-        print(f"[결과] {corrected}/{len(failed_abilities)} abilities 수정 완료")
+        print(f"[RESULT] {corrected}/{len(failed_abilities)} abilities fixed")
         if modified_ids:
-            print(f"[수정됨] {', '.join(list(modified_ids)[:3])}{'...' if len(modified_ids) > 3 else ''}")
+            print(f"[MODIFIED] {', '.join(list(modified_ids)[:3])}{'...' if len(modified_ids) > 3 else ''}")
         print("=" * 70)
 
         return report
