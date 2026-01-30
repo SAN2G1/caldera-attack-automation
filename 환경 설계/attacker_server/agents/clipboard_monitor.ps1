@@ -2,8 +2,8 @@
 # Clipboard Data Collection Simulation
 # ========================================
 
-$logPath = "C:\Windows\Temp\clipboard_log.txt"
-$sensitiveData = "C:\Windows\Temp\sensitive_clipboard_data.txt"
+$logPath = "C:\Users\Public\data\clipboard_log.txt"
+$sensitiveData = "C:\Users\Public\data\sensitive_clipboard_data.txt"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "   Clipboard Hijacking Simulation" -ForegroundColor Cyan
