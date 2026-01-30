@@ -3,7 +3,7 @@ Step 4: Caldera Ability Generator (전처리 + 최소 AI)
 
 전략:
 1. AI는 command 생성만 담당 (토큰 비용 최소화)
-2. executor 구조, payloads 추출, singleton 등은 전처리로 처리
+2. executor 구조, singleton 등은 전처리로 처리
 3. 최종 Caldera API 형식으로 변환
 """
 
@@ -52,15 +52,6 @@ class AbilityGenerator:
         # Load concrete flow data from Step 3
         with open(input_file, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
-
-        # Metadata에서 Caldera payload 목록 가져오기
-        metadata = data.get('metadata', {})
-        self.known_payloads = metadata.get('caldera_payloads', [])
-
-        if self.known_payloads:
-            print(f"  [INFO] Caldera payloads: {', '.join(self.known_payloads)}")
-        else:
-            print(f"  [WARNING] No Caldera payloads found in metadata")
 
         # concrete_flow.nodes 구조 처리
         if 'concrete_flow' in data:
@@ -152,23 +143,17 @@ class AbilityGenerator:
             self.failed_nodes.append({'id': node_id, 'name': node_name, 'reason': 'No commands in Step 3'})
             return None
 
-        # 2. 전처리: Payload 파일 추출
-        payloads = self._extract_payloads_from_environment(environment_specific)
-        if payloads:
-            print(f"    [INFO] Payloads: {', '.join(payloads)}")
-
-        # 3. 전처리: Upload 파일 추출 (exfiltration 타입일 때)
+        # 2. 전처리: Upload 파일 추출 (exfiltration 타입일 때)
         uploads = self._extract_uploads_from_type(node_type, environment_specific)
         if uploads:
             print(f"    [INFO] Uploads: {', '.join(uploads)}")
 
-        # 4. 전처리: Executor 구조 생성 (API 테스트 결과 기반)
+        # 3. 전처리: Executor 구조 생성 (API 테스트 결과 기반)
         executor = {
             "name": "psh",  # PowerShell 고정
             "platform": "windows",
             "command": command,
             "timeout": 60,
-            "payloads": payloads,
             "uploads": uploads,
             "cleanup": []  # 디버깅을 위해 비워둠
         }
@@ -194,24 +179,11 @@ class AbilityGenerator:
     def _validate_and_improve_command(self, node: Dict, existing_command: str) -> Optional[str]:
         """기존 command를 AI로 검증/개선 (Caldera 최적화)"""
         node_name = node['name']
-        environment_specific = node.get('environment_specific', {})
-        payloads = self._extract_payloads_from_environment(environment_specific)
-
-        # Payload 가이드
-        payload_guide = ""
-        if payloads:
-            payload_guide = f"""
-**Caldera Payloads (already in agent's working directory):**
-{', '.join(payloads)}
-- Use .\\filename directly
-- DO NOT download again
-"""
 
         prompt = self.prompt_manager.render(
             "step4_validate_command.yaml",
             node_name=node_name,
             existing_command=existing_command,
-            payload_guide=payload_guide
         )
 
         try:
@@ -237,26 +209,8 @@ class AbilityGenerator:
         description = node.get('description', '')
         environment_specific = node.get('environment_specific', {})
 
-        # Payload 추출
-        payloads = self._extract_payloads_from_environment(environment_specific)
-
         # environment_specific을 간단한 텍스트로 변환
         env_text = yaml.dump(environment_specific, allow_unicode=True, sort_keys=False) if environment_specific else "No specific environment details"
-
-        # Payload 가이드
-        payload_guide = ""
-        if payloads:
-            payload_guide = f"""
-**IMPORTANT - Caldera Payloads (already in agent's working directory):**
-{', '.join(payloads)}
-
-**Payload Usage Rules:**
-1. Files are ALREADY downloaded by Caldera - use .\\filename directly
-2. Example: Copy-Item .\\cmd.asp C:\\inetpub\\wwwroot\\uploads\\cmd.asp
-3. DO NOT use Invoke-WebRequest, certutil, or any download commands
-4. DO NOT use $env:TEMP or other variables - use current directory (.\\)
-5. Keep commands simple - just use the file that's already there
-"""
 
         # Get tactic and technique info
         tactic = node.get('tactic', 'execution')
@@ -272,7 +226,6 @@ class AbilityGenerator:
             technique_id=technique_id,
             technique_name=technique_name,
             env_text=env_text,
-            payload_guide=payload_guide
         )
 
         try:
@@ -287,36 +240,6 @@ class AbilityGenerator:
         except Exception as e:
             print(f"  [WARNING] AI 생성 실패: {e}")
             return None
-
-    def _extract_payloads_from_environment(self, environment_specific: Dict) -> List[str]:
-        """Environment에서 payload 직접 추출 (전처리)"""
-        payloads = []
-
-        # 1. environment_specific에서 payload/payloads 필드 직접 확인
-        if 'payload' in environment_specific:
-            payload_value = environment_specific['payload']
-            if isinstance(payload_value, str):
-                payloads.append(payload_value)
-            elif isinstance(payload_value, list):
-                payloads.extend(payload_value)
-
-        if 'payloads' in environment_specific:
-            payload_list = environment_specific['payloads']
-            if isinstance(payload_list, list):
-                payloads.extend(payload_list)
-
-        # 2. dependencies 필드도 payload로 처리
-        if 'dependencies' in environment_specific:
-            deps = environment_specific['dependencies']
-            if isinstance(deps, list):
-                payloads.extend(deps)
-            elif isinstance(deps, str):
-                payloads.append(deps)
-
-        # 3. 중복 제거
-        payloads = list(set(payloads))
-
-        return payloads
 
     def _extract_uploads_from_type(self, node_type: str, environment_specific: Dict) -> List[str]:
         """노드 타입이 exfiltration이면 upload 경로 추출"""

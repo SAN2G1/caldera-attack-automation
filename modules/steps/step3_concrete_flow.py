@@ -80,11 +80,6 @@ class ConcreteFlowGenerator:
         print(f"  Abstract goals: {len(abstract_flow.get('attack_goals', []))}")
         print(f"  Environment description: {len(environment_description)} characters")
 
-        # Extract Caldera payloads from environment description
-        caldera_payloads = self._extract_caldera_payloads(environment_description)
-        if caldera_payloads:
-            print(f"  Caldera payloads found: {', '.join(caldera_payloads)}")
-
         # Generate concrete flow
         concrete_flow = self._generate_flow(abstract_flow, environment_description)
 
@@ -101,8 +96,7 @@ class ConcreteFlowGenerator:
                 'pdf_name': pdf_name,
                 'version_id': version_id,
                 'step': 3,
-                'description': 'Concrete attack flow (Kill Chain) with environment-specific details',
-                'caldera_payloads': caldera_payloads  # Caldera payload 목록 추가
+                'description': 'Concrete attack flow (Kill Chain) with environment-specific details'
             },
             'concrete_flow': concrete_flow
         }
@@ -421,35 +415,6 @@ class ConcreteFlowGenerator:
                         print(f"  {i}. {node.get('name', 'Unknown')} [{node.get('tactic', 'unknown')}] (no technique)")
 
         print("\n" + "="*70)
-
-    def _extract_caldera_payloads(self, md_content: str) -> List[str]:
-        """Extract Caldera payload files from environment markdown"""
-        payloads = []
-
-        # Look for "## Caldera Payload" section
-        if '## Caldera Payload' in md_content:
-            # Extract section content until next ## or end of file
-            section = md_content.split('## Caldera Payload')[1]
-
-            # Stop at next section (##) or end
-            if '##' in section:
-                section = section.split('##')[0]
-
-            # Extract filenames from "- filename" pattern
-            # Match: - cmd.asp, - PrintSpoofer64.exe, etc.
-            matches = re.findall(
-                r'^-\s+([A-Za-z0-9_.-]+\.(exe|dll|ps1|asp|bat|vbs|sh|zip|tar|gz))',
-                section,
-                re.MULTILINE | re.IGNORECASE
-            )
-
-            for match in matches:
-                filename = match[0]
-                if filename not in payloads:
-                    payloads.append(filename)
-
-        return payloads
-
 
 def main():
     """Test runner"""

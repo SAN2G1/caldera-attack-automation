@@ -196,12 +196,6 @@ python main.py --step 5 --env "environment_description.md" --operation-name "MyO
 2. PrintSpoofer 권한 상승 (SeImpersonatePrivilege 활용)
 3. SMB Admin Shares 접근 가능
 
-## Caldera Payload
-
-- cmd.asp (웹셸)
-- PrintSpoofer64.exe
-- vcruntime140.dll
-- deploy.ps1
 ```
 
 ## 출력 결과
@@ -454,7 +448,6 @@ curl -H "KEY: your_api_key" http://your-caldera-server:8888/api/v2/abilities
 환경 설명 파일에 충분한 정보가 포함되어 있는지 확인:
 - 정확한 IP 주소 및 포트
 - 올바른 인증 정보
-- 필요한 Payload 파일 목록
 
 Self-Correcting이 자동으로 많은 오류를 수정하지만, 환경 정보가 부정확하면 수정이 불가능합니다.
 

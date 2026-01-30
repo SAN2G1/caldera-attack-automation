@@ -27,10 +27,9 @@ prompt: |
      - Reflect IP/URL/credentials/params/filenames/methods from the environment in the command when applicable
      - No external downloads/URLs unless explicitly provided
 
-  3) Payload/tool priority
-     - Priority 1: files explicitly provided in environment/Caldera payloads (already in agent working dir)
-     - Priority 2: built-in OS tools (PowerShell/cmd)
-     - Priority 3: simulation command if neither is possible
+  3) Tool priority
+     - Priority 1: built-in OS tools (PowerShell/cmd)
+     - Priority 2: simulation command if a real command is impossible
 
   4) Preserve information
      - Do not drop or simplify environment-specified values (e.g., POST parameter names, credentials, exact URLs)
@@ -59,7 +58,6 @@ prompt: |
         credentials:
           username: "actual username"
           password: "actual password"
-        payload: "actual filename"
         commands: |
           PowerShell command in single line (use | literal block scalar)
         # Include ANY other details mentioned
