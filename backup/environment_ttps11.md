@@ -10,7 +10,6 @@
         - sandcat_ttps11.ps1
           - Caldera agent 실행파일
           - 웹쉘로 칼데라 에이전트를 실행한 뒤에는 웹쉘을 이용하지 않음
-          - 측면 이동시에도 sandcat_ttps11.ps1을 이용
         - upload-webshell.ps1
           - webshell.asp를 공격자 서버에서 다운로드하여 192.168.56.210/upload.asp로 업로드하는 스크립트
           - multipart/form-data 형식으로 자동 업로드
@@ -34,7 +33,6 @@
 - 유출 대상 파일 위치
     - C:\Users\Public\data\*
     - 유출 행위 시뮬레이션 목적의 더미 데이터가 존재함
-    - 추가적인 정보 수집시 Users 폴더 하위만 탐색후 C:\Users\Public\data\* 에 저장한다.
 
 - 공격자가 발견한 취약한 API
     - POST /upload.asp
@@ -61,4 +59,4 @@
 - 유출 대상 파일 위치
     - C:\Users\Public\data\*
     - 유출 행위 시뮬레이션 목적의 더미 데이터가 존재함
-    추가적인 정보 수집시 Users 폴더 하위만 탐색후 C:\Users\Public\data\* 에 저장한다.
+- 에이전트 전파 필요

