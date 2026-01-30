@@ -1,29 +1,21 @@
 # ttps5 환경 설명
 
 ## 거점 PC: 192.168.56.130 (Windows 10)
+- 도메인: victimcorp.local (DC: 192.168.56.140)
+- 기본 로그인: VICTIMCORP\user1 (로컬 Administrators 그룹 소속)
 
-- 기본 로그인: VICTIMCORP\user1
-- Administrators 그룹 소속 (UAC bypass 가능)
 - Windows 기본 동작을 악용한 UAC bypass (fodhelper.exe) 사용하여 관리자 권한으로 sandcat_ttps5.ps1을 실행
-
-- 웹 서버 구성
-    - index.html
-      - 내부 포털 메인 페이지. 직원 디렉터리 및 보안정책 페이지로 이동.
-    - staff.html
-      - 직원 이름, 부서, 직급, 이메일 패턴: firstname.lastname@victimcorp.com
-    - security.html
-      - 비밀번호 정책
-      - MFA 적용 기준
-      - OWA(Outlook Web Access) 사용 여부 등
 
 - 유출 대상 파일 위치
     - C:\Users\Public\data\*
+
+- 추가적인 정보 수집시 Users 폴더 하위만 탐색후 C:\Users\Public\data\* 에 저장한다.
 
 ---
 
 ## 피해자 내부망 컴퓨터: 192.168.56.131 (Winodws 10, SMB Admin Shares 접근)
 - 탈취한 Admin 계정 정보
-    - usernaem: VICTIMCORP\itadmin
+    - username: VICTIMCORP\itadmin
     - password: ITAdmin123!
 
 ---
