@@ -313,6 +313,9 @@ def main():
         print("\n[Step 5] Caldera 자동화 (업로드 → 실행 → Self-Correcting)")
         print("-" * 70)
 
+        # Caldera 서버 정리용 ID 추적
+        all_operation_ids = []
+
         # Step 4에서 이미 초기화했는지 확인
         if 4 not in steps:
             # Agent Manager 및 VM Controller 초기화
@@ -419,6 +422,7 @@ def main():
             # Operation 생성
             print(f"  Operation 생성 중: {operation_name}")
             op_id = executor.create_operation(operation_name, uploaded_adversary_id, args.agent_paw)
+            all_operation_ids.append(op_id)
             print(f"  [OK] Operation ID: {op_id}")
 
             # Operation 시작
@@ -601,6 +605,7 @@ def main():
 
                 executor = CalderaExecutor(get_caldera_url(), get_caldera_api_key())
                 op_id_retry = executor.create_operation(operation_name_retry, uploaded_adversary_id, args.agent_paw)
+                all_operation_ids.append(op_id_retry)
                 print(f"  [OK] Operation ID: {op_id_retry}")
 
                 # Operation 시작
@@ -785,6 +790,50 @@ def main():
     print(f"완료된 Step: {summary['steps_completed']}/{summary['steps_completed'] + summary['steps_failed']}")
     print(f"\n메트릭 저장: {metrics_file}")
     print("="*70)
+
+    # Caldera 서버 정리 (업로드된 abilities, adversaries, operations 삭제)
+    if 5 in steps:
+        print("\n" + "="*70)
+        print("[Caldera 정리] 서버에서 사용된 리소스 삭제")
+        print("="*70)
+
+        try:
+            # Operation 삭제
+            if all_operation_ids:
+                cleanup_executor = CalderaExecutor(get_caldera_url(), get_caldera_api_key())
+                op_deleted = 0
+                for op_id_to_delete in all_operation_ids:
+                    try:
+                        cleanup_executor.delete_operation(op_id_to_delete)
+                        op_deleted += 1
+                    except Exception:
+                        pass
+                print(f"  [OK] Operation {op_deleted}/{len(all_operation_ids)}개 삭제")
+
+            # Ability, Adversary 삭제
+            cleanup_uploader = CalderaUploader()
+            if cleanup_uploader.uploaded_ability_ids:
+                ab_deleted = cleanup_uploader.delete_abilities(cleanup_uploader.uploaded_ability_ids)
+                print(f"  [OK] Ability {ab_deleted}개 삭제")
+
+            # abilities.yml에서 ID 읽어서 삭제 (uploader 인스턴스가 다를 수 있으므로)
+            with open(abilities_file, 'r', encoding='utf-8') as f:
+                abilities_data = yaml.safe_load(f) or []
+            ability_ids_to_delete = [a.get('ability_id') for a in abilities_data if a.get('ability_id')]
+            if ability_ids_to_delete:
+                ab_deleted = cleanup_uploader.delete_abilities(ability_ids_to_delete)
+                print(f"  [OK] Ability {ab_deleted}/{len(ability_ids_to_delete)}개 삭제")
+
+            # adversaries.yml에서 ID 읽어서 삭제
+            with open(adversaries_file, 'r', encoding='utf-8') as f:
+                adversaries_data = yaml.safe_load(f) or []
+            adversary_ids_to_delete = [a.get('adversary_id') for a in adversaries_data if a.get('adversary_id')]
+            if adversary_ids_to_delete:
+                adv_deleted = cleanup_uploader.delete_adversaries(adversary_ids_to_delete)
+                print(f"  [OK] Adversary {adv_deleted}/{len(adversary_ids_to_delete)}개 삭제")
+
+        except Exception as e:
+            print(f"  [WARNING] Caldera 정리 중 오류: {e}")
 
     # 모든 절차 완료 후 VM 종료
     print("\n" + "="*70)

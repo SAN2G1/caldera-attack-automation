@@ -83,6 +83,55 @@ class CalderaExecutor:
                     return True
             time.sleep(5)
 
+    def stop_operation(self, operation_id: str):
+        """실행 중인 Operation을 중단.
+
+        Usage:
+            타임아웃 등으로 Operation을 강제 중단해야 할 때 사용됩니다.
+            state를 'cleanup'으로 변경하여 Caldera가 정리 후 종료하도록 합니다.
+
+        Args:
+            operation_id: Operation ID.
+        """
+        url = f"{self.base_url}/api/v2/operations/{operation_id}"
+        payload = {"state": "cleanup"}
+        response = self.session.patch(url, json=payload)
+        response.raise_for_status()
+
+    def delete_operation(self, operation_id: str):
+        """Operation 삭제.
+
+        Args:
+            operation_id: Operation ID.
+        """
+        url = f"{self.base_url}/api/v2/operations/{operation_id}"
+        response = self.session.delete(url)
+        response.raise_for_status()
+
+    def stop_all_running_operations(self):
+        """실행 중인 모든 Operation을 중단.
+
+        Usage:
+            강제 종료 후 재시작 시, 잔여 Operation이 에이전트에 간섭하지 않도록
+            모든 running 상태의 Operation을 정리할 때 사용됩니다.
+
+        Returns:
+            int: 중단된 Operation 수.
+        """
+        url = f"{self.base_url}/api/v2/operations"
+        response = self.session.get(url)
+        response.raise_for_status()
+
+        stopped = 0
+        for op in response.json():
+            if op.get('state') in ('running', 'run_one_link', 'paused'):
+                try:
+                    self.stop_operation(op['id'])
+                    stopped += 1
+                except Exception:
+                    pass
+        return stopped
+
     def get_operation_results(self, operation_id: str) -> List[AbilityResult]:
         """Operation 실행 결과 조회.
 

@@ -125,6 +125,46 @@ class CalderaUploader:
         print(f"\n  완료: {len(uploaded_ids)}/{len(adversaries)} (신규: {created}, 수정: {updated})")
         return uploaded_ids
 
+    def delete_abilities(self, ability_ids: List[str]) -> int:
+        """Caldera 서버에서 Ability 삭제.
+
+        Args:
+            ability_ids: 삭제할 Ability ID 목록.
+
+        Returns:
+            int: 삭제된 Ability 수.
+        """
+        deleted = 0
+        for ability_id in ability_ids:
+            url = f"{self.base_url}/api/v2/abilities/{ability_id}"
+            try:
+                response = self.session.delete(url)
+                if response.status_code in (200, 204):
+                    deleted += 1
+            except Exception:
+                pass
+        return deleted
+
+    def delete_adversaries(self, adversary_ids: List[str]) -> int:
+        """Caldera 서버에서 Adversary 삭제.
+
+        Args:
+            adversary_ids: 삭제할 Adversary ID 목록.
+
+        Returns:
+            int: 삭제된 Adversary 수.
+        """
+        deleted = 0
+        for adversary_id in adversary_ids:
+            url = f"{self.base_url}/api/v2/adversaries/{adversary_id}"
+            try:
+                response = self.session.delete(url)
+                if response.status_code in (200, 204):
+                    deleted += 1
+            except Exception:
+                pass
+        return deleted
+
     def save_tracking_file(self, output_file: str):
         """업로드된 ID 추적 파일 저장.
 
