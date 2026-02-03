@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 import argparse
@@ -7,6 +8,7 @@ import time
 import threading
 
 from modules.caldera.executor import CalderaExecutor
+from modules.caldera.uploader import CalderaUploader
 from modules.caldera.agent_manager import AgentManager
 from modules.core.config import get_caldera_url, get_caldera_api_key
 from scripts import vm_reload
@@ -26,6 +28,8 @@ class CalderaPipelineRunner:
 
         # 실행 시간 추적용
         self.execution_times = []  # 각 TTPs 실행 시간 기록
+        # 현재 실행 중인 TTPs 번호 (강제 종료 시 정리용)
+        self.current_ttps_num = None
 
         # TTPs 설정 정보 (문서 기반)
         self.ttps_configs = {
@@ -249,11 +253,12 @@ class CalderaPipelineRunner:
             process.kill()
 
     def cleanup_after_timeout(self):
-        """타임아웃으로 main.py 강제 종료 후 잔여 환경 정리
+        """타임아웃 또는 강제 종료 후 잔여 환경 정리
 
         1. 실행 중인 모든 Caldera Operation 중단
-        2. Caldera 에이전트 정리
-        3. VM 종료
+        2. 업로드된 Ability/Adversary 삭제
+        3. Caldera 에이전트 정리
+        4. VM 종료
         """
         print("\n[정리] 강제 종료 후 환경 정리 시작...")
 
@@ -265,7 +270,41 @@ class CalderaPipelineRunner:
         except Exception as e:
             print(f"  [WARNING] Operation 중단 실패: {e}")
 
-        # 2. Caldera 에이전트 정리
+        # 2. 업로드된 Ability/Adversary 삭제
+        if self.current_ttps_num is not None:
+            try:
+                config = self.ttps_configs[self.current_ttps_num]
+                pdf_stem = Path(config['pdf']).stem
+                # 가장 최근 버전 디렉토리에서 abilities.yml / adversaries.yml 찾기
+                ttps_dir = self.project_root / "data" / "processed" / pdf_stem
+                if ttps_dir.exists():
+                    version_dirs = sorted(ttps_dir.iterdir(), reverse=True)
+                    for version_dir in version_dirs:
+                        caldera_dir = version_dir / "caldera"
+                        abilities_file = caldera_dir / "abilities.yml"
+                        adversaries_file = caldera_dir / "adversaries.yml"
+                        if abilities_file.exists() or adversaries_file.exists():
+                            import yaml
+                            uploader = CalderaUploader()
+                            if abilities_file.exists():
+                                with open(abilities_file, 'r', encoding='utf-8') as f:
+                                    abilities = yaml.safe_load(f) or []
+                                ids = [a.get('ability_id') for a in abilities if a.get('ability_id')]
+                                if ids:
+                                    deleted = uploader.delete_abilities(ids)
+                                    print(f"  [OK] Ability {deleted}/{len(ids)}개 삭제")
+                            if adversaries_file.exists():
+                                with open(adversaries_file, 'r', encoding='utf-8') as f:
+                                    adversaries = yaml.safe_load(f) or []
+                                ids = [a.get('adversary_id') for a in adversaries if a.get('adversary_id')]
+                                if ids:
+                                    deleted = uploader.delete_adversaries(ids)
+                                    print(f"  [OK] Adversary {deleted}/{len(ids)}개 삭제")
+                            break
+            except Exception as e:
+                print(f"  [WARNING] Ability/Adversary 삭제 실패: {e}")
+
+        # 3. Caldera 에이전트 정리
         try:
             agent_manager = AgentManager()
             agent_manager.kill_all_agents()
@@ -273,11 +312,27 @@ class CalderaPipelineRunner:
         except Exception as e:
             print(f"  [WARNING] 에이전트 정리 실패: {e}")
 
-        # 3. VM 종료
+        # 4. 현재 TTPs의 VM 종료 (config에서 직접 VM 이름을 가져와 확실하게 종료)
         try:
             controller = vm_reload.VBoxController()
-            controller.shutdown_all()
-            print("  [OK] VM 종료 완료")
+            if self.current_ttps_num is not None:
+                config = self.ttps_configs[self.current_ttps_num]
+                vm_names = []
+                for key in ('VBOX_VM_NAME', 'VBOX_VM_NAME_lateral', 'VBOX_VM_NAME_ad'):
+                    name = config['env_updates'].get(key)
+                    if name:
+                        vm_names.append(name)
+                for vm_name in vm_names:
+                    try:
+                        state = controller.get_state(vm_name)
+                        if state == "running":
+                            controller.stop_vm(vm_name, force=True)
+                            print(f"  [OK] VM {vm_name} 종료 완료")
+                    except Exception as e:
+                        print(f"  [WARNING] VM {vm_name} 종료 실패: {e}")
+            else:
+                controller.shutdown_all()
+                print("  [OK] VM 종료 완료")
         except Exception as e:
             print(f"  [WARNING] VM 종료 실패: {e}")
 
@@ -293,6 +348,7 @@ class CalderaPipelineRunner:
         Returns:
             str: "success", "failed", "timeout"
         """
+        self.current_ttps_num = ttps_num
         config = self.ttps_configs[ttps_num]
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -303,6 +359,16 @@ class CalderaPipelineRunner:
 
         # .env 파일 업데이트
         self.update_env_file(config['env_updates'], config['env_comments'])
+
+        # 자식 프로세스용 환경변수 구성
+        # subprocess는 부모의 os.environ을 상속하고, load_dotenv()는 이미 존재하는
+        # 환경변수를 덮어쓰지 않으므로, .env 파일 변경이 무시될 수 있음.
+        # 따라서 VBOX_ 관련 변수를 명시적으로 설정하고, 주석 처리 대상은 제거함.
+        child_env = os.environ.copy()
+        for key, value in config['env_updates'].items():
+            child_env[key] = value
+        for key in config['env_comments']:
+            child_env.pop(key, None)
 
         # main.py 실행 명령어 구성
         cmd = [
@@ -341,10 +407,11 @@ class CalderaPipelineRunner:
                 f.write(f"{'='*80}\n\n")
                 f.flush()
 
-                # 프로세스 실행
+                # 프로세스 실행 (child_env로 VBOX_ 환경변수를 명시적으로 전달)
                 process = subprocess.Popen(
                     cmd,
                     cwd=self.project_root,
+                    env=child_env,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -586,11 +653,13 @@ def main():
         runner.run_all()
     except KeyboardInterrupt:
         print("\n\n사용자에 의해 중단되었습니다.")
+        runner.cleanup_after_timeout()
         sys.exit(1)
     except Exception as e:
         print(f"\n오류 발생: {str(e)}")
         import traceback
         traceback.print_exc()
+        runner.cleanup_after_timeout()
         sys.exit(1)
 
 
