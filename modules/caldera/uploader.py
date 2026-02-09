@@ -20,7 +20,7 @@ class CalderaUploader:
         self.uploaded_ability_ids = []
         self.uploaded_adversary_ids = []
 
-    def _upsert(self, endpoint: str, item_id: str, data: dict) -> tuple[bool, str]:
+    def _upsert(self, endpoint: str, item_id: str, data: dict) -> tuple[bool, str, str]:
         """공통 upsert 로직: 존재하면 PUT, 없으면 POST.
 
         Args:
@@ -29,20 +29,30 @@ class CalderaUploader:
             data: 데이터 딕셔너리.
 
         Returns:
-            tuple[bool, str]: (성공 여부, 수행한 작업 'UPDATE'/'CREATE').
+            tuple[bool, str, str]: (성공 여부, 수행한 작업 'UPDATE'/'CREATE', 에러 메시지).
         """
         check_url = f"{self.base_url}/api/v2/{endpoint}/{item_id}"
-        exists = self.session.get(check_url).status_code == 200
+        
+        try:
+            exists = self.session.get(check_url).status_code == 200
 
-        if exists:
-            response = self.session.put(check_url, json=data)
-            action = "UPDATE"
-        else:
-            url = f"{self.base_url}/api/v2/{endpoint}"
-            response = self.session.post(url, json=data)
-            action = "CREATE"
+            if exists:
+                response = self.session.put(check_url, json=data)
+                action = "UPDATE"
+            else:
+                url = f"{self.base_url}/api/v2/{endpoint}"
+                response = self.session.post(url, json=data)
+                action = "CREATE"
 
-        return response.status_code in (200, 201), action
+            if response.status_code in (200, 201):
+                return True, action, ""
+            else:
+                return False, "", f"HTTP {response.status_code}: {response.text}"
+        
+        except requests.exceptions.RequestException as e:
+            return False, "", f"Network Error: {str(e)}"
+        except Exception as e:
+            return False, "", f"Unknown Error: {str(e)}"
 
 
     def upload_abilities(self, abilities_file: str) -> List[str]:
@@ -72,7 +82,7 @@ class CalderaUploader:
             ability_id = ability.get('ability_id')
             print(f"  [{i}/{len(abilities)}] {ability.get('name', 'Unknown')}")
 
-            success, action = self._upsert('abilities', ability_id, ability)
+            success, action, error_msg = self._upsert('abilities', ability_id, ability)
             if success:
                 print(f"    [OK] {action}")
                 uploaded_ids.append(ability_id)
@@ -80,7 +90,7 @@ class CalderaUploader:
                 created += 1 if action == "CREATE" else 0
                 updated += 1 if action == "UPDATE" else 0
             else:
-                print(f"    [FAILED]")
+                print(f"    [FAILED] {error_msg}")
 
         print(f"\n  완료: {len(uploaded_ids)}/{len(abilities)} (신규: {created}, 수정: {updated})")
         return uploaded_ids
@@ -112,7 +122,7 @@ class CalderaUploader:
             adversary_id = adversary.get('adversary_id')
             print(f"  [{i}/{len(adversaries)}] {adversary.get('name', 'Unknown')}")
 
-            success, action = self._upsert('adversaries', adversary_id, adversary)
+            success, action, error_msg = self._upsert('adversaries', adversary_id, adversary)
             if success:
                 print(f"    [OK] {action}")
                 uploaded_ids.append(adversary_id)
@@ -120,7 +130,7 @@ class CalderaUploader:
                 created += 1 if action == "CREATE" else 0
                 updated += 1 if action == "UPDATE" else 0
             else:
-                print(f"    [FAILED]")
+                print(f"    [FAILED] {error_msg}")
 
         print(f"\n  완료: {len(uploaded_ids)}/{len(adversaries)} (신규: {created}, 수정: {updated})")
         return uploaded_ids
