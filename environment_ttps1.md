@@ -1,5 +1,10 @@
 # ttps1 환경 설명
 
+## 공통 환경 정보
+- OS: Windows 10
+- Shell: Windows PowerShell 5.1 (powershell.exe)
+  - Invoke-WebRequest 사용 시 반드시 -UseBasicParsing 옵션 필요
+
 ## 공격자 서버(192.168.56.1:34444)
 
 - api 설명
@@ -30,9 +35,10 @@
   - 계정: admin / P@ssw0rd!2020
 
 - 파일 업로드: http://192.168.56.105/upload_handler.asp
-  - 방식: POST 요청, multipart/form-data
+  - 방식: POST 요청, RFC 2388 표준 multipart/form-data
   - 폼 필드 이름: `file`
   - 업로드 경로: /uploads/
+  - PowerShell에서는 `System.Net.WebClient.UploadFile()` 사용 권장
 
 ## 피해자 서버(192.168.56.105)
 

@@ -13,7 +13,7 @@ prompt: |
   - Technique: {technique_id} ({technique_name})
 
   [Original Command]
-  ```powershell
+  ```
   {original_cmd}
   ```
 
@@ -46,10 +46,9 @@ prompt: |
   ═══════════════════════════════════════════════════════════════════
   [Important Rules]
   ═══════════════════════════════════════════════════════════════════
-  1. Each Ability runs in an independent PowerShell process - no variable sharing between Abilities
+  1. Each Ability runs in an independent process - no variable sharing between Abilities
   2. Use actual values from the Environment Description
-  3. Maintain PowerShell 5.1 compatibility
+  3. Follow all shell-specific constraints noted in the Environment Description
   4. Output only the fixed command (no explanation needed)
 
-  Generate the fixed PowerShell command:
-  ```powershell
+  Generate the fixed command:

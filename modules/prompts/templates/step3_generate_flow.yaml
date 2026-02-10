@@ -18,17 +18,18 @@ prompt: |
   ## Core Principles (concise, mandatory)
 
   1) Every node MUST include `environment_specific.commands`
-     - Single-line executable PowerShell/command
+     - Single-line command executable in the target environment's shell
      - Chain multiple actions in one line with `;`
      - No code blocks/backticks/comments; plain command string only
      - If a real command is impossible, add a simulation stub (e.g., echo); never leave it empty
+     - Follow any shell-specific constraints noted in the environment description
 
   2) Enforce environment detail usage
      - Reflect IP/URL/credentials/params/filenames/methods from the environment in the command when applicable
      - No external downloads/URLs unless explicitly provided
 
   3) Tool priority
-     - Priority 1: built-in OS tools (PowerShell/cmd)
+     - Priority 1: built-in OS/shell tools
      - Priority 2: simulation command if a real command is impossible
 
   4) Preserve information
@@ -50,7 +51,6 @@ prompt: |
       description: "What this accomplishes"
 
       environment_specific:
-        # Extract ALL details from environment description
         target: "actual IP/hostname"
         url: "actual URL"
         method: "actual HTTP method (POST/GET/etc)"
@@ -59,8 +59,8 @@ prompt: |
           username: "actual username"
           password: "actual password"
         commands: |
-          PowerShell command in single line (use | literal block scalar)
-        # Include ANY other details mentioned
+          Single-line command for target shell (use | literal block scalar)
+        # Include ANY other details from environment description
 
   edges:
     - from: "node_id"

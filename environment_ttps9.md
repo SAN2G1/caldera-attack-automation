@@ -1,5 +1,10 @@
 # ttps9 환경 설명
 
+## 공통 환경 정보
+- OS: Windows 10
+- Shell: Windows PowerShell 5.1 (powershell.exe)
+  - Invoke-WebRequest 사용 시 반드시 -UseBasicParsing 옵션 필요
+
 ## 공격자 서버 (192.168.56.1:34444)
 
 - api 설명

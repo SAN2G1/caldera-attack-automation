@@ -9,9 +9,9 @@
 ### .env 수정 사항
 ```env
 VBOX_VM_NAME=ttps1
-VBOX_SNAPSHOT_NAME=ttps1
+VBOX_SNAPSHOT_NAME=ttps1_patch
 VBOX_VM_NAME_lateral=ttps1_2
-VBOX_SNAPSHOT_NAME_lateral=ttps1_2
+VBOX_SNAPSHOT_NAME_lateral=ttps1_2_patch
 # VBOX_VM_NAME_ad=
 # VBOX_SNAPSHOT_NAME_ad=
 ```
@@ -28,7 +28,7 @@ python main.py --step all --pdf "data/raw/KISA_TTPs_1.pdf" --env "environment_tt
 ### .env 수정 사항
 ```env
 VBOX_VM_NAME=ttps2
-VBOX_SNAPSHOT_NAME=ttps2
+VBOX_SNAPSHOT_NAME=ttps2_patch
 # VBOX_VM_NAME_lateral=
 # VBOX_SNAPSHOT_NAME_lateral=
 # VBOX_VM_NAME_ad=
@@ -47,7 +47,7 @@ python main.py --step all --pdf "data/raw/KISA_TTPs_2.pdf" --env "environment_tt
 ### .env 수정 사항
 ```env
 VBOX_VM_NAME=ttps3
-VBOX_SNAPSHOT_NAME=ttps3
+VBOX_SNAPSHOT_NAME=ttps3_patch
 # VBOX_VM_NAME_lateral=
 # VBOX_SNAPSHOT_NAME_lateral=
 # VBOX_VM_NAME_ad=
@@ -66,7 +66,7 @@ python main.py --step all --pdf "data/raw/KISA_TTPs_3.pdf" --env "environment_tt
 ### .env 수정 사항
 ```env
 VBOX_VM_NAME=ttps4
-VBOX_SNAPSHOT_NAME=ttps4
+VBOX_SNAPSHOT_NAME=ttps4_patch
 # VBOX_VM_NAME_lateral=
 # VBOX_SNAPSHOT_NAME_lateral=
 # VBOX_VM_NAME_ad=
@@ -85,9 +85,9 @@ python main.py --step all --pdf "data/raw/KISA_TTPs_4.pdf" --env "environment_tt
 ### .env 수정 사항
 ```env
 VBOX_VM_NAME=ttps5
-VBOX_SNAPSHOT_NAME=ttps5
+VBOX_SNAPSHOT_NAME=ttps5_patch
 VBOX_VM_NAME_lateral=ttps5_2
-VBOX_SNAPSHOT_NAME_lateral=ttps5_2
+VBOX_SNAPSHOT_NAME_lateral=ttps5_2_patch
 VBOX_VM_NAME_ad=ttps5_ad
 VBOX_SNAPSHOT_NAME_ad=ttps5_ad
 ```
@@ -104,7 +104,7 @@ python main.py --step all --pdf "data/raw/KISA_TTPs_5.pdf" --env "environment_tt
 ### .env 수정 사항
 ```env
 VBOX_VM_NAME=ttps6
-VBOX_SNAPSHOT_NAME=ttps6
+VBOX_SNAPSHOT_NAME=ttps6_patch
 # VBOX_VM_NAME_lateral=
 # VBOX_SNAPSHOT_NAME_lateral=
 # VBOX_VM_NAME_ad=
@@ -123,9 +123,9 @@ python main.py --step all --pdf "data/raw/KISA_TTPs_6.pdf" --env "environment_tt
 ### .env 수정 사항
 ```env
 VBOX_VM_NAME=ttps7
-VBOX_SNAPSHOT_NAME=ttps7
+VBOX_SNAPSHOT_NAME=ttps7_patch
 VBOX_VM_NAME_lateral=ttps7_2
-VBOX_SNAPSHOT_NAME_lateral=ttps7_2
+VBOX_SNAPSHOT_NAME_lateral=ttps7_2_patch
 # VBOX_VM_NAME_ad=
 # VBOX_SNAPSHOT_NAME_ad=
 ```
@@ -142,9 +142,9 @@ python main.py --step all --pdf "data/raw/KISA_TTPs_7.pdf" --env "environment_tt
 ### .env 수정 사항
 ```env
 VBOX_VM_NAME=ttps8
-VBOX_SNAPSHOT_NAME=ttps8
+VBOX_SNAPSHOT_NAME=ttps8_patch
 VBOX_VM_NAME_lateral=ttps8_2
-VBOX_SNAPSHOT_NAME_lateral=ttps8_2
+VBOX_SNAPSHOT_NAME_lateral=ttps8_2_patch
 VBOX_VM_NAME_ad=ttps8_ad
 VBOX_SNAPSHOT_NAME_ad=ttps8_ad
 ```
@@ -161,7 +161,7 @@ python main.py --step all --pdf "data/raw/KISA_TTPs_8.pdf" --env "environment_tt
 ### .env 수정 사항
 ```env
 VBOX_VM_NAME=ttps9
-VBOX_SNAPSHOT_NAME=ttps9
+VBOX_SNAPSHOT_NAME=ttps9_patch
 # VBOX_VM_NAME_lateral=
 # VBOX_SNAPSHOT_NAME_lateral=
 # VBOX_VM_NAME_ad=
@@ -180,9 +180,9 @@ python main.py --step all --pdf "data/raw/KISA_TTPs_9.pdf" --env "environment_tt
 ### .env 수정 사항
 ```env
 VBOX_VM_NAME=ttps10
-VBOX_SNAPSHOT_NAME=ttps10
+VBOX_SNAPSHOT_NAME=ttps10_patch
 VBOX_VM_NAME_lateral=ttps10_2
-VBOX_SNAPSHOT_NAME_lateral=ttps10_2
+VBOX_SNAPSHOT_NAME_lateral=ttps10_2_patch
 # VBOX_VM_NAME_ad=
 # VBOX_SNAPSHOT_NAME_ad=
 ```
@@ -199,9 +199,9 @@ python main.py --step all --pdf "data/raw/KISA_TTPs_10.pdf" --env "environment_t
 ### .env 수정 사항
 ```env
 VBOX_VM_NAME=ttps11
-VBOX_SNAPSHOT_NAME=ttps11
+VBOX_SNAPSHOT_NAME=ttps11_patch
 VBOX_VM_NAME_lateral=ttps11_2
-VBOX_SNAPSHOT_NAME_lateral=ttps11_2
+VBOX_SNAPSHOT_NAME_lateral=ttps11_2_patch
 # VBOX_VM_NAME_ad=
 # VBOX_SNAPSHOT_NAME_ad=
 ```
