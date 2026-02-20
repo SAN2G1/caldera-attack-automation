@@ -58,39 +58,30 @@ class ConcreteFlowGenerator:
         raise ValueError("OS 정보가 환경설명에 명시되어 있지 않습니다. 환경설명 파일을 수정해주세요.")
 
     def _load_mitre_for_validation(self, os_type: str = 'windows'):
-        """Load MITRE data for validation only (not for prompt injection)"""
+        """Load pre-parsed MITRE data for validation"""
         if os_type in self.mitre_techniques:
             return
 
-        refined_dir = PROJECT_ROOT / "data" / "mitre" / "refined"
-        mitre_files = list(refined_dir.glob(f"enterprise-attack-*-{os_type}-detailed.json"))
+        mitre_dir = PROJECT_ROOT / "data" / "mitre"
+        mitre_path = mitre_dir / "v15.1.json"
 
-        if not mitre_files:
-            legacy_path = refined_dir / f"mitre_{os_type}_option_b.json"
-            if legacy_path.exists():
-                mitre_files = [legacy_path]
-
-        if mitre_files:
-            mitre_path = sorted(mitre_files, reverse=True)[0]
+        if mitre_path.exists():
             try:
                 with open(mitre_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
 
-                self.mitre_techniques[os_type] = data.get('tactics', {})
-                self.valid_technique_ids[os_type] = set()
+                version = data.get('version', 'unknown')
+                techniques = data.get('platforms', {}).get(os_type, {})
 
-                for tactic, techniques in self.mitre_techniques[os_type].items():
-                    for tech_id in techniques.keys():
-                        self.valid_technique_ids[os_type].add(tech_id)
+                self.mitre_techniques[os_type] = techniques
+                self.valid_technique_ids[os_type] = set(techniques.keys())
 
-                version = data.get('metadata', {}).get('version', 'unknown')
-                technique_count = len(self.valid_technique_ids[os_type])
-                print(f"  [OK] MITRE v{version} loaded for validation ({technique_count} techniques)")
+                print(f"  [OK] MITRE v{version} loaded ({len(techniques)} {os_type} techniques)")
             except Exception as e:
-                print(f"  [WARNING] Failed to load MITRE data for validation: {e}")
+                print(f"  [WARNING] Failed to load MITRE data: {e}")
                 self.mitre_techniques[os_type] = {}
         else:
-            print(f"  [WARNING] MITRE data not found for validation")
+            print(f"  [WARNING] MITRE v15.1 data not found at {mitre_path}")
             self.mitre_techniques[os_type] = {}
 
     def generate_concrete_flow(self, abstract_flow_file: str,
