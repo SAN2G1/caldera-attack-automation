@@ -1,0 +1,215 @@
+{
+  "metadata": {
+    "source": "KISA_TTPs_3",
+    "mitre_version": "15.1",
+    "total_techniques": 30
+  },
+  "techniques": [
+    {
+      "tactic": "Execution",
+      "kisa_name": "Service Execution",
+      "technique_id": "T1569.002",
+      "technique_name": "Service Execution"
+    },
+    {
+      "tactic": "Execution",
+      "kisa_name": "Scripting",
+      "technique_id": "T1059",
+      "technique_name": "Command and Scripting Interpreter"
+    },
+    {
+      "tactic": "Execution",
+      "kisa_name": "Command-Line Interface",
+      "technique_id": "T1059",
+      "technique_name": "Command and Scripting Interpreter"
+    },
+    {
+      "tactic": "Persistence",
+      "kisa_name": "Registry Run Keys / Startup Folder",
+      "technique_id": "T1547.001",
+      "technique_name": "Registry Run Keys / Startup Folder"
+    },
+    {
+      "tactic": "Persistence",
+      "kisa_name": "Modify Existing Service",
+      "technique_id": "T1543.003",
+      "technique_name": "Windows Service"
+    },
+    {
+      "tactic": "Persistence",
+      "kisa_name": "New Service",
+      "technique_id": "T1543.003",
+      "technique_name": "Windows Service"
+    },
+    {
+      "tactic": "Privilege Escalation",
+      "kisa_name": "Process Injection",
+      "technique_id": "T1055",
+      "technique_name": "Process Injection"
+    },
+    {
+      "tactic": "Privilege Escalation",
+      "kisa_name": "New Service",
+      "technique_id": "T1543.003",
+      "technique_name": "Windows Service"
+    },
+    {
+      "tactic": "Privilege Escalation",
+      "kisa_name": "Valid Accounts",
+      "technique_id": "T1078",
+      "technique_name": "Valid Accounts"
+    },
+    {
+      "tactic": "Defense Evasion",
+      "kisa_name": "Obfuscated Files or Information",
+      "technique_id": "T1027",
+      "technique_name": "Obfuscated Files or Information"
+    },
+    {
+      "tactic": "Defense Evasion",
+      "kisa_name": "Process Injection",
+      "technique_id": "T1055",
+      "technique_name": "Process Injection"
+    },
+    {
+      "tactic": "Defense Evasion",
+      "kisa_name": "Disabling Security Tools",
+      "technique_id": "T1562.001",
+      "technique_name": "Disable or Modify Tools"
+    },
+    {
+      "tactic": "Credential Access",
+      "kisa_name": "Input Capture",
+      "technique_id": "T1056",
+      "technique_name": "Input Capture"
+    },
+    {
+      "tactic": "Credential Access",
+      "kisa_name": "Hooking",
+      "technique_id": "T1056.004",
+      "technique_name": "Credential API Hooking"
+    },
+    {
+      "tactic": "Credential Access",
+      "kisa_name": "Credentials in Files",
+      "technique_id": "T1552.001",
+      "technique_name": "Credentials In Files"
+    },
+    {
+      "tactic": "Discovery",
+      "kisa_name": "Security Software Discovery",
+      "technique_id": "T1518.001",
+      "technique_name": "Security Software Discovery"
+    },
+    {
+      "tactic": "Discovery",
+      "kisa_name": "System Information Discovery",
+      "technique_id": "T1082",
+      "technique_name": "System Information Discovery"
+    },
+    {
+      "tactic": "Discovery",
+      "kisa_name": "Remote System Discovery",
+      "technique_id": "T1018",
+      "technique_name": "Remote System Discovery"
+    },
+    {
+      "tactic": "Lateral Movement",
+      "kisa_name": "Replication Through Removable Media",
+      "technique_id": "T1091",
+      "technique_name": "Replication Through Removable Media"
+    },
+    {
+      "tactic": "Lateral Movement",
+      "kisa_name": "Taint Shared Content",
+      "technique_id": "T1080",
+      "technique_name": "Taint Shared Content"
+    },
+    {
+      "tactic": "Lateral Movement",
+      "kisa_name": "Exploitation of Remote Services",
+      "technique_id": "T1210",
+      "technique_name": "Exploitation of Remote Services"
+    },
+    {
+      "tactic": "Collection",
+      "kisa_name": "Input Capture",
+      "technique_id": "T1056",
+      "technique_name": "Input Capture"
+    },
+    {
+      "tactic": "Collection",
+      "kisa_name": "Clipboard Data",
+      "technique_id": "T1115",
+      "technique_name": "Clipboard Data"
+    },
+    {
+      "tactic": "Collection",
+      "kisa_name": "Data from Local System",
+      "technique_id": "T1005",
+      "technique_name": "Data from Local System"
+    },
+    {
+      "tactic": "Command and Control",
+      "kisa_name": "Standard Cryptographic Protocol",
+      "technique_id": "T1573",
+      "technique_name": "Encrypted Channel"
+    },
+    {
+      "tactic": "Command and Control",
+      "kisa_name": "Standard Application Layer Protocol",
+      "technique_id": "T1071",
+      "technique_name": "Application Layer Protocol"
+    },
+    {
+      "tactic": "Command and Control",
+      "kisa_name": "Standard Non-Application Layer Protocol",
+      "technique_id": "T1053.002",
+      "technique_name": "At"
+    },
+    {
+      "tactic": "Exfiltration",
+      "kisa_name": "Data Encrypted",
+      "technique_id": "T1053.002",
+      "technique_name": "At"
+    },
+    {
+      "tactic": "Exfiltration",
+      "kisa_name": "Exfiltration Over Other Network Medium",
+      "technique_id": "T1011",
+      "technique_name": "Exfiltration Over Other Network Medium"
+    },
+    {
+      "tactic": "Exfiltration",
+      "kisa_name": "Exfiltration Over Command and Control Channel",
+      "technique_id": "T1041",
+      "technique_name": "Exfiltration Over C2 Channel"
+    }
+  ],
+  "unique_ids": [
+    "T1005",
+    "T1011",
+    "T1018",
+    "T1027",
+    "T1041",
+    "T1053.002",
+    "T1055",
+    "T1056",
+    "T1056.004",
+    "T1059",
+    "T1071",
+    "T1078",
+    "T1080",
+    "T1082",
+    "T1091",
+    "T1115",
+    "T1210",
+    "T1518.001",
+    "T1543.003",
+    "T1547.001",
+    "T1552.001",
+    "T1562.001",
+    "T1569.002",
+    "T1573"
+  ]
+}

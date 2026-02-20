@@ -1,13 +1,16 @@
 """
-Module 3: Concrete Attack Flow Generation
+Module 3: Concrete Attack Flow Generation (WITHOUT MITRE Injection)
 Combine abstract flow + environment description (MD) → concrete attack flow (Kill Chain)
+AI generates technique_id/name from internal knowledge (no MITRE data in prompt)
+
+실험용: MITRE 데이터 미주입 버전
 """
 
 import yaml
 import os
+import json
 import re
-import difflib
-from typing import Dict, List
+from typing import Dict, List, Set
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -16,41 +19,86 @@ from datetime import datetime
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-    
+
 from modules.ai.factory import get_llm_client
 from modules.prompts.manager import PromptManager
-
-try:
-    from mitreattack.stix20 import MitreAttackData
-except ImportError:
-    print("[WARNING] mitreattack-python not installed. Run: pip install mitreattack-python==3.0.6")
-    MitreAttackData = None
 
 
 class ConcreteFlowGenerator:
     def __init__(self):
         self.llm = get_llm_client()
         self.prompt_manager = PromptManager()
-        self.mitre_data = None
+        self.mitre_techniques: Dict[str, Dict] = {}  # OS별 캐시 (검증용)
+        self.valid_technique_ids: Dict[str, Set[str]] = {}  # OS별 유효 ID (검증용)
 
-        # Load MITRE ATT&CK data if available
-        if MitreAttackData:
+    def _extract_os_from_environment(self, env_description: str) -> str:
+        """Extract OS type from environment description"""
+        os_match = re.search(r'OS:\s*(Windows|Linux|macOS|Ubuntu|CentOS|Debian)[^\n]*', env_description, re.IGNORECASE)
+        if os_match:
+            os_str = os_match.group(1).lower()
+            if 'windows' in os_str:
+                return 'windows'
+            elif os_str in ['linux', 'ubuntu', 'centos', 'debian']:
+                return 'linux'
+            elif 'macos' in os_str or 'mac' in os_str:
+                return 'macos'
+
+        # OS 정보 미감지 시 중단
+        print("\n" + "="*70)
+        print("[ERROR] OS 정보를 환경설명 파일에서 찾을 수 없습니다.")
+        print("="*70)
+        print("\n환경설명 파일에 다음 형식으로 OS를 명시해주세요:\n")
+        print("  ## 공통 환경 정보")
+        print("  - OS: Windows 10")
+        print("  또는")
+        print("  - OS: Ubuntu 22.04")
+        print("  또는")
+        print("  - OS: macOS Ventura")
+        print("\n" + "="*70)
+        raise ValueError("OS 정보가 환경설명에 명시되어 있지 않습니다. 환경설명 파일을 수정해주세요.")
+
+    def _load_mitre_for_validation(self, os_type: str = 'windows'):
+        """Load MITRE data for validation only (not for prompt injection)"""
+        if os_type in self.mitre_techniques:
+            return
+
+        refined_dir = PROJECT_ROOT / "data" / "mitre" / "refined"
+        mitre_files = list(refined_dir.glob(f"enterprise-attack-*-{os_type}-detailed.json"))
+
+        if not mitre_files:
+            legacy_path = refined_dir / f"mitre_{os_type}_option_b.json"
+            if legacy_path.exists():
+                mitre_files = [legacy_path]
+
+        if mitre_files:
+            mitre_path = sorted(mitre_files, reverse=True)[0]
             try:
-                # 프로젝트 루트 기준 절대 경로로 지정해 상대 경로 오류 방지
-                mitre_path = PROJECT_ROOT / "data" / "mitre" / "enterprise-attack.json"
-                print(f"  [Loading MITRE ATT&CK data...] ({mitre_path})")
-                self.mitre_data = MitreAttackData(str(mitre_path))
-                print("  [OK] MITRE ATT&CK data loaded")
+                with open(mitre_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+
+                self.mitre_techniques[os_type] = data.get('tactics', {})
+                self.valid_technique_ids[os_type] = set()
+
+                for tactic, techniques in self.mitre_techniques[os_type].items():
+                    for tech_id in techniques.keys():
+                        self.valid_technique_ids[os_type].add(tech_id)
+
+                version = data.get('metadata', {}).get('version', 'unknown')
+                technique_count = len(self.valid_technique_ids[os_type])
+                print(f"  [OK] MITRE v{version} loaded for validation ({technique_count} techniques)")
             except Exception as e:
-                print(f"  [WARNING] Failed to load MITRE ATT&CK data: {e}")
-                self.mitre_data = None
+                print(f"  [WARNING] Failed to load MITRE data for validation: {e}")
+                self.mitre_techniques[os_type] = {}
+        else:
+            print(f"  [WARNING] MITRE data not found for validation")
+            self.mitre_techniques[os_type] = {}
 
     def generate_concrete_flow(self, abstract_flow_file: str,
                               environment_md_file: str,
                               output_file: str = None,
                               version_id: str = None):
         """Generate concrete attack flow by combining abstract flow + environment MD"""
-        print("\n[Step 3] Concrete Attack Flow Generation started...")
+        print("\n[Step 3] Concrete Attack Flow Generation started (NO MITRE INJECTION)...")
 
         # Load abstract flow
         with open(abstract_flow_file, 'r', encoding='utf-8') as f:
@@ -59,7 +107,7 @@ class ConcreteFlowGenerator:
         abstract_flow = abstract_data.get('abstract_flow', {})
         metadata = abstract_data.get('metadata', {})
 
-        # pdf_name, version_id 추출 (경로 → 메타데이터 → 기본값)
+        # pdf_name, version_id 추출
         pdf_name = metadata.get('pdf_name')
         if not pdf_name:
             pdf_name = Path(abstract_flow_file).stem.replace("_step2", "")
@@ -69,7 +117,7 @@ class ConcreteFlowGenerator:
         derived_version = (
             version_id
             or metadata.get('version_id')
-            or Path(abstract_flow_file).parent.name  # data/processed/{pdf}/{version}/
+            or Path(abstract_flow_file).parent.name
         )
         version_id = derived_version or datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -80,11 +128,17 @@ class ConcreteFlowGenerator:
         print(f"  Abstract goals: {len(abstract_flow.get('attack_goals', []))}")
         print(f"  Environment description: {len(environment_description)} characters")
 
-        # Generate concrete flow
-        concrete_flow = self._generate_flow(abstract_flow, environment_description)
+        # Extract OS from environment
+        os_type = self._extract_os_from_environment(environment_description)
 
-        # Add MITRE ATT&CK technique IDs
-        concrete_flow = self._add_technique_ids(concrete_flow)
+        # Load MITRE data for validation only
+        self._load_mitre_for_validation(os_type)
+
+        # Generate concrete flow (AI uses internal knowledge for techniques)
+        concrete_flow = self._generate_flow(abstract_flow, environment_description, os_type)
+
+        # Validate AI-generated technique IDs
+        concrete_flow = self._validate_technique_ids(concrete_flow, os_type)
 
         # Save results
         output_data = {
@@ -96,12 +150,13 @@ class ConcreteFlowGenerator:
                 'pdf_name': pdf_name,
                 'version_id': version_id,
                 'step': 3,
-                'description': 'Concrete attack flow (Kill Chain) with environment-specific details'
+                'description': 'Concrete attack flow - AI internal knowledge (NO MITRE injection)',
+                'os_type': os_type,
+                'experiment': 'without_mitre_injection'
             },
             'concrete_flow': concrete_flow
         }
 
-        # output_file 미지정 시 data/processed/{pdf}/{version}/{pdf}_step3.yml 사용
         if output_file is None:
             output_file = Path("../../data/processed") / pdf_name / version_id / f"{pdf_name}_step3.yml"
 
@@ -114,16 +169,18 @@ class ConcreteFlowGenerator:
         print(f"  - Version: {version_id}")
         self._print_summary(concrete_flow)
 
-    def _generate_flow(self, abstract_flow: Dict, environment_description: str) -> Dict:
-        """Generate concrete attack flow using Claude (with retry on parse errors)"""
-        print("  [Generating concrete attack flow...]")
+    def _generate_flow(self, abstract_flow: Dict, environment_description: str, os_type: str) -> Dict:
+        """Generate concrete attack flow using LLM (NO MITRE data in prompt)"""
+        print(f"  [Generating concrete attack flow ({os_type}) - AI internal knowledge...]")
 
         abstract_flow_yaml = yaml.dump(abstract_flow, allow_unicode=True)
 
+        # NOTE: mitre_techniques NOT passed to prompt
         prompt = self.prompt_manager.render(
             "step3_generate_flow.yaml",
             abstract_flow=abstract_flow_yaml,
-            environment_description=environment_description
+            environment_description=environment_description,
+            os_type=os_type.capitalize()
         )
 
         MAX_RETRIES = 3
@@ -133,24 +190,19 @@ class ConcreteFlowGenerator:
             try:
                 if attempt > 1:
                     print(f"  [Retry {attempt}/{MAX_RETRIES}] Regenerating flow...")
-                    # 재시도 시 프롬프트에 이전 오류 정보 추가
                     retry_prompt = f"{prompt}\n\n[IMPORTANT] Previous attempt failed with error: {last_error}\nPlease generate valid YAML format without syntax errors."
                     response_text = self.llm.generate_text(prompt=retry_prompt, max_tokens=12000)
                 else:
                     response_text = self.llm.generate_text(prompt=prompt, max_tokens=12000)
 
-                # YAML 추출 및 파싱
                 yaml_text = self._extract_yaml(response_text)
 
                 if not yaml_text or len(yaml_text.strip()) < 10:
                     raise ValueError("Extracted YAML is empty or too short")
 
-                # Windows 경로의 백슬래시 이스케이프 문제 수정
                 yaml_text = self._fix_backslashes(yaml_text)
-
                 flow = yaml.safe_load(yaml_text)
 
-                # 기본 구조 검증
                 if not isinstance(flow, dict):
                     raise ValueError(f"Flow must be a dictionary, got {type(flow)}")
 
@@ -166,194 +218,60 @@ class ConcreteFlowGenerator:
             except yaml.YAMLError as e:
                 last_error = f"YAML parsing error: {str(e)}"
                 print(f"  [ERROR] Attempt {attempt}/{MAX_RETRIES}: {last_error}")
-
                 if attempt < MAX_RETRIES:
-                    print(f"  [INFO] Will retry with error feedback...")
                     continue
 
             except (ValueError, KeyError, TypeError) as e:
                 last_error = f"Structure validation error: {str(e)}"
                 print(f"  [ERROR] Attempt {attempt}/{MAX_RETRIES}: {last_error}")
-
                 if attempt < MAX_RETRIES:
-                    print(f"  [INFO] Will retry with error feedback...")
                     continue
 
             except Exception as e:
                 last_error = f"Unexpected error: {str(e)}"
                 print(f"  [ERROR] Attempt {attempt}/{MAX_RETRIES}: {last_error}")
-
                 if attempt < MAX_RETRIES:
-                    print(f"  [INFO] Will retry...")
                     continue
-
-        # 모든 재시도 실패
-        print(f"\n  [FATAL] Failed to generate valid concrete flow after {MAX_RETRIES} attempts")
-        print(f"  [FATAL] Last error: {last_error}")
-        print(f"  [INFO] Saving failed response for debugging...")
-
-        # 디버깅을 위해 실패한 응답 저장
-        debug_file = "failed_flow_generation.txt"
-        try:
-            with open(debug_file, 'w', encoding='utf-8') as f:
-                f.write(f"=== Failed Flow Generation Debug Info ===\n")
-                f.write(f"Timestamp: {datetime.now().isoformat()}\n")
-                f.write(f"Attempts: {MAX_RETRIES}\n")
-                f.write(f"Last Error: {last_error}\n\n")
-                f.write(f"=== Last Response ===\n")
-                f.write(response_text if 'response_text' in locals() else "No response captured")
-                f.write(f"\n\n=== Extracted YAML ===\n")
-                f.write(yaml_text if 'yaml_text' in locals() else "No YAML extracted")
-            print(f"  [INFO] Debug info saved to: {debug_file}")
-        except:
-            pass
 
         raise RuntimeError(f"Failed to generate valid concrete flow after {MAX_RETRIES} attempts. Last error: {last_error}")
 
+    def _validate_technique_ids(self, flow: Dict, os_type: str) -> Dict:
+        """Validate AI-generated technique IDs (count valid/invalid)"""
+        valid_ids = self.valid_technique_ids.get(os_type, set())
+        if not valid_ids:
+            print("  [WARNING] No valid technique IDs for validation, counting only")
 
-    def _add_technique_ids(self, flow: Dict) -> Dict:
-        """Add MITRE ATT&CK Technique ID (best match) to nodes using mitreattack-python"""
-        if not self.mitre_data:
-            print("  [WARNING] MITRE ATT&CK data not available, skipping technique ID assignment")
-            return flow
-
-        print("  [Adding MITRE ATT&CK Technique IDs (best match)...]")
+        print("  [Validating AI-generated technique IDs...]")
 
         nodes = flow.get('nodes', [])
-        techniques_added = 0
-        no_technique = 0
+        valid_count = 0
+        invalid_count = 0
+        missing_count = 0
 
         for node in nodes:
-            tactic = node.get('tactic', '').lower().replace('-', '_')
-            name = node.get('name', '')
-            description = node.get('description', '')
+            technique = node.get('technique', {})
 
-            # Get best matching technique (only 1)
-            candidates = self._find_technique_candidates(tactic, name, description, top_k=1)
+            if not technique:
+                node['technique'] = {'id': 'T0000', 'name': 'Unknown'}
+                missing_count += 1
+                continue
 
-            if candidates:
-                # Assign the best technique directly
-                best_technique = candidates[0]
-                node['technique'] = {
-                    'id': best_technique['id'],
-                    'name': best_technique['name']
-                }
-                techniques_added += 1
+            tech_id = technique.get('id', '')
+
+            if tech_id in valid_ids:
+                valid_count += 1
+            elif tech_id == 'T0000' or not tech_id:
+                missing_count += 1
             else:
-                # Use placeholder if no candidates found
-                node['technique'] = {
-                    'id': 'T0000',
-                    'name': 'Unknown'
-                }
-                no_technique += 1
+                # 조건 B에서는 invalid도 그대로 유지 (실험용)
+                invalid_count += 1
+                print(f"    [INFO] Unverified ID: {tech_id} for '{node.get('name', 'unknown')}'")
 
-        print(f"  [OK] Nodes with techniques: {techniques_added}, No technique: {no_technique}")
+        total = valid_count + invalid_count + missing_count
+        valid_rate = (valid_count / total * 100) if total > 0 else 0
+
+        print(f"  [OK] Technique validation: {valid_count} valid ({valid_rate:.1f}%), {invalid_count} unverified, {missing_count} missing")
         return flow
-
-    def _find_technique_candidates(self, tactic: str, name: str, description: str, top_k: int = 1) -> List[Dict]:
-        """Find up to top_k matching MITRE ATT&CK techniques; if none, return empty (no forced multi-hit)"""
-        if not self.mitre_data:
-            return []
-
-        # Normalize tactic name for MITRE ATT&CK
-        tactic_mapping = {
-            'initial_access': 'initial-access',
-            'execution': 'execution',
-            'persistence': 'persistence',
-            'privilege_escalation': 'privilege-escalation',
-            'defense_evasion': 'defense-evasion',
-            'credential_access': 'credential-access',
-            'discovery': 'discovery',
-            'lateral_movement': 'lateral-movement',
-            'collection': 'collection',
-            'command_and_control': 'command-and-control',
-            'exfiltration': 'exfiltration',
-            'impact': 'impact',
-            'reconnaissance': 'reconnaissance'
-        }
-
-        mitre_tactic = tactic_mapping.get(tactic, tactic)
-
-        # Get all techniques
-        techniques = self.mitre_data.get_techniques()
-
-        # Score all techniques matching the tactic (완화된 스코어링으로 T0000 남발 방지)
-        scored_techniques = []
-
-        for tech in techniques:
-            # Check if technique belongs to this tactic
-            tech_tactics = [phase['phase_name'] for phase in tech.get('kill_chain_phases', [])]
-
-            if mitre_tactic not in tech_tactics:
-                continue
-
-            tech_name = tech.get('name', '').lower()
-            tech_desc = tech.get('description', '').lower()
-
-            # Calculate matching score (단어 교집합 + 부분 포함 여부를 모두 반영)
-            score = 0
-            name_lower = name.lower()
-            desc_lower = description.lower()
-
-            name_tokens = set(re.findall(r"[a-z0-9]+", name_lower))
-            tech_name_tokens = set(re.findall(r"[a-z0-9]+", tech_name))
-            desc_tokens = set(re.findall(r"[a-z0-9]+", desc_lower))
-            tech_desc_tokens = set(re.findall(r"[a-z0-9]+", tech_desc))
-
-            # Check name similarity (higher weight)
-            name_overlap = len(name_tokens & tech_name_tokens)
-            score += name_overlap * 3
-
-            # Check description similarity (lower weight)
-            desc_overlap = len(desc_tokens & tech_desc_tokens)
-            score += min(desc_overlap, 5)
-
-            # Partial substring matches 보너스 (교집합이 적을 때 완화)
-            if name_lower and name_lower in tech_name:
-                score += 2
-            if tech_name and tech_name in name_lower:
-                score += 1
-            if name_lower and name_lower in tech_desc:
-                score += 1
-            if desc_lower and desc_lower in tech_desc:
-                score += 1
-
-            # Only include if score is reasonable
-            if score >= 1:
-                scored_techniques.append({
-                    'id': tech.get('external_references', [{}])[0].get('external_id', 'T0000'),
-                    'name': tech.get('name', 'Unknown'),
-                    'score': score
-                })
-
-        # Sort by score (descending) and return up to top_k (없으면 빈 리스트 그대로 반환)
-        scored_techniques.sort(key=lambda x: x['score'], reverse=True)
-        if scored_techniques:
-            return scored_techniques[:top_k]
-
-        # Fuzzy fallback: single best match within tactic based on sequence similarity (top 1 only)
-        best = None
-        best_ratio = 0
-        for tech in techniques:
-            tech_tactics = [phase['phase_name'] for phase in tech.get('kill_chain_phases', [])]
-            if mitre_tactic not in tech_tactics:
-                continue
-            tech_name_full = tech.get('name', '')
-            ratio_name = difflib.SequenceMatcher(None, name_lower, tech_name_full.lower()).ratio()
-            ratio_desc = difflib.SequenceMatcher(None, desc_lower, tech.get('description', '').lower()).ratio()
-            ratio = max(ratio_name, ratio_desc)
-            if ratio > best_ratio:
-                best_ratio = ratio
-                best = {
-                    'id': tech.get('external_references', [{}])[0].get('external_id', 'T0000'),
-                    'name': tech.get('name', 'Unknown'),
-                    'score': ratio
-                }
-        # 최소 유사도 임계치 0.2로 너무 엉뚱한 매칭 방지
-        if best and best_ratio >= 0.2:
-            return [best]
-
-        return []
 
     def _extract_yaml(self, text: str) -> str:
         """Extract YAML from response"""
@@ -364,43 +282,41 @@ class ConcreteFlowGenerator:
         return text
 
     def _fix_backslashes(self, yaml_text: str) -> str:
-        """
-        YAML에서 Windows 경로의 백슬래시 이스케이프 문제 수정
-        큰따옴표 안의 백슬래시를 올바르게 이스케이프
-        """
-        import re
-        
-        # 큰따옴표로 둘러싸인 문자열 찾기
+        """Fix Windows path backslash escaping in YAML"""
         def fix_quoted_string(match):
             content = match.group(1)
-            
-            # 먼저 모든 연속된 백슬래시를 단일 백슬래시로 정규화
-            # \\\ -> \, \\ -> \, \ -> \
             normalized = re.sub(r'\\+', r'\\', content)
-            
-            # 그 다음 모든 백슬래시를 이중 백슬래시로 변환
             fixed = normalized.replace('\\', '\\\\')
-            
             return f'"{fixed}"'
-        
-        # 큰따옴표로 감싸진 모든 문자열에 대해 백슬래시 수정
+
         fixed_yaml = re.sub(r'"([^"]*)"', fix_quoted_string, yaml_text)
-        return fixed_yaml
         return fixed_yaml
 
     def _print_summary(self, flow: Dict):
         """Print flow summary"""
         print("\n" + "="*70)
-        print("Concrete Attack Flow Summary:")
+        print("Concrete Attack Flow Summary (WITHOUT MITRE INJECTION):")
         print("="*70)
 
         nodes = flow.get('nodes', [])
         edges = flow.get('edges', [])
-        metadata = flow.get('metadata', {})
 
         print(f"\nTotal Steps: {len(nodes)}")
         print(f"Dependencies: {len(edges)}")
-        print(f"Complexity: {metadata.get('complexity', 'Unknown')}")
+
+        # Technique statistics
+        valid_techniques = 0
+        unknown_techniques = 0
+        for node in nodes:
+            tech = node.get('technique', {})
+            if tech.get('id', 'T0000') != 'T0000':
+                valid_techniques += 1
+            else:
+                unknown_techniques += 1
+
+        print(f"\nTechnique Mapping:")
+        print(f"  With ID: {valid_techniques}")
+        print(f"  Unknown: {unknown_techniques}")
 
         if 'execution_order' in flow:
             print(f"\nExecution Order:")
@@ -415,6 +331,7 @@ class ConcreteFlowGenerator:
                         print(f"  {i}. {node.get('name', 'Unknown')} [{node.get('tactic', 'unknown')}] (no technique)")
 
         print("\n" + "="*70)
+
 
 def main():
     """Test runner"""

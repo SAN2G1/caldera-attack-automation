@@ -1,7 +1,7 @@
-description: "Combine abstract attack flow with environment details to generate concrete attack flow"
+description: "Combine abstract attack flow with environment details to generate concrete attack flow - AI generates MITRE techniques from internal knowledge"
 
 prompt: |
-  You are a penetration testing expert creating executable attack plans.
+  You are a penetration testing expert with deep knowledge of MITRE ATT&CK framework.
 
   # Abstract Attack Goals
 
@@ -14,6 +14,7 @@ prompt: |
   # Task
 
   Map each abstract goal to concrete attack steps using the specific environment details.
+  For each step, select the most appropriate MITRE ATT&CK technique based on your knowledge.
 
   ## Core Principles (concise, mandatory)
 
@@ -35,6 +36,13 @@ prompt: |
   4) Preserve information
      - Do not drop or simplify environment-specified values (e.g., POST parameter names, credentials, exact URLs)
 
+  5) **MITRE ATT&CK Technique Selection**
+     - For each node, select ONE appropriate MITRE ATT&CK technique
+     - Use valid technique IDs from the Enterprise ATT&CK matrix (e.g., T1059.001, T1190, T1021.002)
+     - Prefer sub-techniques (e.g., T1059.001) over parent techniques (e.g., T1059) when applicable
+     - The technique MUST be appropriate for {os_type} platform
+     - Use your knowledge of MITRE ATT&CK framework to select the most accurate technique
+
   ## Output Structure
 
   **IMPORTANT YAML Formatting Rules**:
@@ -47,7 +55,10 @@ prompt: |
   nodes:
     - id: "node_001"
       name: "Attack step name"
-      tactic: "MITRE ATT&CK Tactic"
+      tactic: "initial-access"  # Must be one of: initial-access, execution, persistence, privilege-escalation, defense-evasion, credential-access, discovery, lateral-movement, collection, command-and-control, exfiltration, impact
+      technique:
+        id: "T1190"  # Valid MITRE ATT&CK technique ID
+        name: "Exploit Public-Facing Application"  # Exact technique name
       description: "What this accomplishes"
 
       environment_specific:
@@ -71,7 +82,5 @@ prompt: |
     - "node_001"
     - "node_002"
   ```
-
-  **Note**: Technique IDs will be added automatically in post-processing using mitreattack-python.
 
   **Output YAML only. No explanations.**

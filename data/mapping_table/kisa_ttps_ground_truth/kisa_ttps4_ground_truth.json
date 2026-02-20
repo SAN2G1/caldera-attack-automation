@@ -1,0 +1,293 @@
+{
+  "metadata": {
+    "source": "KISA_TTPs_4",
+    "mitre_version": "15.1",
+    "total_techniques": 41
+  },
+  "techniques": [
+    {
+      "tactic": "Reconnaissance",
+      "kisa_name": "Search Victim-Owned Websites",
+      "technique_id": "T1594",
+      "technique_name": "Search Victim-Owned Websites"
+    },
+    {
+      "tactic": "Reconnaissance",
+      "kisa_name": "Gather Victim Identity Information",
+      "technique_id": "T1053.002",
+      "technique_name": "At"
+    },
+    {
+      "tactic": "Reconnaissance",
+      "kisa_name": "Gather Victim Org Information",
+      "technique_id": "T1053.002",
+      "technique_name": "At"
+    },
+    {
+      "tactic": "Reconnaissance",
+      "kisa_name": "Search Open Websites/Domain",
+      "technique_id": "T1593",
+      "technique_name": "Search Open Websites/Domain"
+    },
+    {
+      "tactic": "Reconnaissance",
+      "kisa_name": "Phishing for Information",
+      "technique_id": "T1053.002",
+      "technique_name": "At"
+    },
+    {
+      "tactic": "Resource Development",
+      "kisa_name": "Acquire Infrastructure",
+      "technique_id": "T1583",
+      "technique_name": "Acquire Infrastructure"
+    },
+    {
+      "tactic": "Resource Development",
+      "kisa_name": "Compromise Infrastructure",
+      "technique_id": "T1584",
+      "technique_name": "Compromise Infrastructure"
+    },
+    {
+      "tactic": "Resource Development",
+      "kisa_name": "Establish Accounts",
+      "technique_id": "T1585",
+      "technique_name": "Establish Accounts"
+    },
+    {
+      "tactic": "Resource Development",
+      "kisa_name": "Develop Capabilities",
+      "technique_id": "T1587",
+      "technique_name": "Develop Capabilities"
+    },
+    {
+      "tactic": "Resource Development",
+      "kisa_name": "Obtain Capabilities",
+      "technique_id": "T1588",
+      "technique_name": "Obtain Capabilities"
+    },
+    {
+      "tactic": "Resource Development",
+      "kisa_name": "Compromise Account",
+      "technique_id": "T1586",
+      "technique_name": "Compromise Account"
+    },
+    {
+      "tactic": "Initial Access",
+      "kisa_name": "Phishing",
+      "technique_id": "T1566",
+      "technique_name": "Phishing"
+    },
+    {
+      "tactic": "Initial Access",
+      "kisa_name": "Exploit Public Facing Application",
+      "technique_id": "T1053.002",
+      "technique_name": "At"
+    },
+    {
+      "tactic": "Execution",
+      "kisa_name": "Command and Scripting Interpreter",
+      "technique_id": "T1059",
+      "technique_name": "Command and Scripting Interpreter"
+    },
+    {
+      "tactic": "Execution",
+      "kisa_name": "User Execution",
+      "technique_id": "T1204",
+      "technique_name": "User Execution"
+    },
+    {
+      "tactic": "Persistence",
+      "kisa_name": "Create Account",
+      "technique_id": "T1136",
+      "technique_name": "Create Account"
+    },
+    {
+      "tactic": "Persistence",
+      "kisa_name": "Boot or Logon Autostart Execution",
+      "technique_id": "T1547",
+      "technique_name": "Boot or Logon Autostart Execution"
+    },
+    {
+      "tactic": "Persistence",
+      "kisa_name": "Scheduled Task/Job",
+      "technique_id": "T1053",
+      "technique_name": "Scheduled Task/Job"
+    },
+    {
+      "tactic": "Discovery",
+      "kisa_name": "File and Directory Discovery",
+      "technique_id": "T1083",
+      "technique_name": "File and Directory Discovery"
+    },
+    {
+      "tactic": "Discovery",
+      "kisa_name": "Application Window Discovery",
+      "technique_id": "T1010",
+      "technique_name": "Application Window Discovery"
+    },
+    {
+      "tactic": "Credential Access",
+      "kisa_name": "OS Credential Dumping",
+      "technique_id": "T1003",
+      "technique_name": "OS Credential Dumping"
+    },
+    {
+      "tactic": "Credential Access",
+      "kisa_name": "Two-Factor Authentication Interception",
+      "technique_id": "T1053.002",
+      "technique_name": "At"
+    },
+    {
+      "tactic": "Credential Access",
+      "kisa_name": "Unsecured Credentials",
+      "technique_id": "T1552",
+      "technique_name": "Unsecured Credentials"
+    },
+    {
+      "tactic": "Credential Access",
+      "kisa_name": "Input Capture",
+      "technique_id": "T1056",
+      "technique_name": "Input Capture"
+    },
+    {
+      "tactic": "Defense Evasion",
+      "kisa_name": "Masquerading",
+      "technique_id": "T1036",
+      "technique_name": "Masquerading"
+    },
+    {
+      "tactic": "Defense Evasion",
+      "kisa_name": "Obfuscated Files or Information",
+      "technique_id": "T1027",
+      "technique_name": "Obfuscated Files or Information"
+    },
+    {
+      "tactic": "Defense Evasion",
+      "kisa_name": "Deobfuscate/Decode Files or Information",
+      "technique_id": "T1140",
+      "technique_name": "Deobfuscate/Decode Files or Information"
+    },
+    {
+      "tactic": "Defense Evasion",
+      "kisa_name": "Indicator Removal on Host",
+      "technique_id": "T1070",
+      "technique_name": "Indicator Removal"
+    },
+    {
+      "tactic": "Lateral Movement",
+      "kisa_name": "Internal Spearphishing",
+      "technique_id": "T1534",
+      "technique_name": "Internal Spearphishing"
+    },
+    {
+      "tactic": "Collection",
+      "kisa_name": "Archive Collected Data",
+      "technique_id": "T1560",
+      "technique_name": "Archive Collected Data"
+    },
+    {
+      "tactic": "Collection",
+      "kisa_name": "Email Collection",
+      "technique_id": "T1114",
+      "technique_name": "Email Collection"
+    },
+    {
+      "tactic": "Collection",
+      "kisa_name": "Input Capture",
+      "technique_id": "T1056",
+      "technique_name": "Input Capture"
+    },
+    {
+      "tactic": "Collection",
+      "kisa_name": "Screen Capture",
+      "technique_id": "T1113",
+      "technique_name": "Screen Capture"
+    },
+    {
+      "tactic": "Collection",
+      "kisa_name": "Data from Removable Media",
+      "technique_id": "T1025",
+      "technique_name": "Data from Removable Media"
+    },
+    {
+      "tactic": "Collection",
+      "kisa_name": "Data from Local System",
+      "technique_id": "T1005",
+      "technique_name": "Data from Local System"
+    },
+    {
+      "tactic": "Collection",
+      "kisa_name": "Automated Collection",
+      "technique_id": "T1119",
+      "technique_name": "Automated Collection"
+    },
+    {
+      "tactic": "Command and Control",
+      "kisa_name": "Application Layer Protocol",
+      "technique_id": "T1071",
+      "technique_name": "Application Layer Protocol"
+    },
+    {
+      "tactic": "Command and Control",
+      "kisa_name": "Data Encoding",
+      "technique_id": "T1132",
+      "technique_name": "Data Encoding"
+    },
+    {
+      "tactic": "Command and Control",
+      "kisa_name": "Web Service",
+      "technique_id": "T1102",
+      "technique_name": "Web Service"
+    },
+    {
+      "tactic": "Exfiltration",
+      "kisa_name": "Data Transfer Size Limits",
+      "technique_id": "T1030",
+      "technique_name": "Data Transfer Size Limits"
+    },
+    {
+      "tactic": "Exfiltration",
+      "kisa_name": "Exfiltration over Web Service",
+      "technique_id": "T1567",
+      "technique_name": "Exfiltration Over Web Service"
+    }
+  ],
+  "unique_ids": [
+    "T1003",
+    "T1005",
+    "T1010",
+    "T1025",
+    "T1027",
+    "T1030",
+    "T1036",
+    "T1053",
+    "T1053.002",
+    "T1056",
+    "T1059",
+    "T1070",
+    "T1071",
+    "T1083",
+    "T1102",
+    "T1113",
+    "T1114",
+    "T1119",
+    "T1132",
+    "T1136",
+    "T1140",
+    "T1204",
+    "T1534",
+    "T1547",
+    "T1552",
+    "T1560",
+    "T1566",
+    "T1567",
+    "T1583",
+    "T1584",
+    "T1585",
+    "T1586",
+    "T1587",
+    "T1588",
+    "T1593",
+    "T1594"
+  ]
+}
