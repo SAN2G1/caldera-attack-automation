@@ -206,11 +206,13 @@ class AbstractFlowExtractor:
         )
 
         # Generate using LLM
-        response_text = self.llm.generate_text(prompt=prompt, max_tokens=4000)
+        response_text = self.llm.generate_text(prompt=prompt, max_tokens=8000)
 
         try:
             yaml_text = self._extract_yaml(response_text)
             flow = yaml.safe_load(yaml_text)
+            if 'attack_goals' in flow:
+                flow['attack_goals'] = [g for g in flow['attack_goals'] if g is not None]
             print(f"  [OK] Synthesized flow with {len(flow.get('attack_goals', []))} goals")
             return flow
         except Exception as e:
@@ -238,6 +240,8 @@ class AbstractFlowExtractor:
         if 'attack_goals' in flow:
             print(f"\nAttack Goals ({len(flow['attack_goals'])}):")
             for i, goal in enumerate(flow['attack_goals'], 1):
+                if goal is None:
+                    continue
                 print(f"  {i}. [{goal.get('tactic', 'unknown')}] {goal.get('goal', 'Unknown')}")
 
         if 'mitre_tactics' in flow:
