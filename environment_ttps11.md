@@ -4,6 +4,7 @@
 - OS: Windows 10
 - Shell: Windows PowerShell 5.1 (powershell.exe)
   - Invoke-WebRequest 사용 시 반드시 -UseBasicParsing 옵션 필요
+  - executionpolicy : Bypass 필요
 
 ## 공격자 서버 (192.168.56.1:34444)
 
@@ -14,7 +15,7 @@
       - 목록
         - sandcat_ttps11.ps1
           - Caldera agent 실행파일
-          - 웹쉘로 칼데라 에이전트를 실행한 뒤에는 웹쉘을 이용하지 않음
+          - 초기 권한 상승용(PrintSpoofer)으로만 웹쉘을 거친 후, 이후 웹쉘 없이 새 에이전트 환경에서 직접 실행함
           - 측면 이동시에도 sandcat_ttps11.ps1을 이용
         - upload-webshell.ps1
           - webshell.asp를 공격자 서버에서 다운로드하여 192.168.56.210/upload.asp로 업로드하는 스크립트
@@ -23,6 +24,8 @@
           - webshell.asp?c={명령} 로 실행 가능
         - PrintSpoofer64.exe
           - Print Spoofer 실행파일
+          - IIS AppPool\DefaultAppPool 권한으로 실행해야함
+          - -c 옵션 뒤에 공백이 포함된 명령어를 넣을 때는 반드시 큰따옴표로 전체를 묶어야 함
         - vcruntime140.dll
           - Print Spoofer 실행파일에 필요한 라이브러리
         - screen_capture.ps1
