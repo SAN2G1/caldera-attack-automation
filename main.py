@@ -183,7 +183,7 @@ def main():
     try:
         llm_provider = get_llm_provider()
         llm_client = get_llm_client()
-        llm_model = getattr(llm_client, 'model', '') or getattr(llm_client, 'model_name', '')
+        llm_model = getattr(llm_client, 'model_name', '') or getattr(llm_client, 'model', '')
     except:
         llm_provider = "unknown"
         llm_model = "unknown"
